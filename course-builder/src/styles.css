@@ -57,8 +57,154 @@ main {
   margin-bottom: 16px;
 }
 
+.card h3 {
+  color: #1a4d7c;
+  margin-bottom: 12px;
+  font-size: 1.1rem;
+}
+
 .card p {
   margin-bottom: 12px;
+}
+
+.form-intro {
+  color: #555;
+  margin-bottom: 24px;
+}
+
+/* Form fields */
+.field {
+  margin-bottom: 20px;
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #1a4d7c;
+}
+
+.field input[type="text"],
+.field input[type="number"],
+.field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1px solid #d4cfc1;
+  border-radius: 6px;
+  background: #fdfcf9;
+  color: #2c2c2c;
+}
+
+.field input[type="text"]:focus,
+.field input[type="number"]:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: #1a4d7c;
+  background: white;
+}
+
+.field textarea {
+  resize: vertical;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.field input[type="file"] {
+  padding: 8px;
+  font-size: 0.95rem;
+}
+
+.hint {
+  display: block;
+  color: #888;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+/* Buttons */
+.primary-button {
+  background: #1a4d7c;
+  color: white;
+  border: none;
+  padding: 14px 28px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #143d62;
+}
+
+.primary-button:disabled {
+  background: #c4c4c4;
+  cursor: not-allowed;
+}
+
+.download-link {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  margin-top: 8px;
+  margin-bottom: 24px;
+}
+
+.secondary-button {
+  background: transparent;
+  color: #1a4d7c;
+  border: 1px solid #1a4d7c;
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 16px;
+}
+
+.secondary-button:hover {
+  background: #f0f4f9;
+}
+
+/* Result panel */
+.next-steps-heading {
+  margin-top: 24px;
+  margin-bottom: 8px;
+}
+
+.next-steps {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 16px;
+}
+
+.next-steps li {
+  padding: 6px 0;
+  font-size: 0.95rem;
+  color: #444;
+}
+
+.next-steps-tip {
+  background: #f7f4ec;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  margin-bottom: 0;
+}
+
+/* Error */
+.error-message {
+  background: #fdecec;
+  border: 1px solid #f5c6c6;
+  color: #842029;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  font-size: 0.95rem;
 }
 
 .status {
