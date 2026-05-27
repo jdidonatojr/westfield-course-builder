@@ -111,7 +111,7 @@ def build_slide_summary(slides, max_chars_per_slide=200):
 def call_claude(prompt, api_key):
     """Send a single-message prompt to Claude and return the text response."""
     payload = {
-        'model': 'claude-haiku-4-5',
+        'model': 'claude-haiku-4-5-20251001',
         'max_tokens': 1024,
         'messages': [{'role': 'user', 'content': prompt}]
     }
