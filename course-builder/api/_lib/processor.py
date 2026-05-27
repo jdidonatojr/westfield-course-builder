@@ -210,6 +210,38 @@ def build_txt_file(course_title, visible_slides):
 
 
 # ============================================================
+# BUILDER: same as above, but from pre-extracted slide data (browser-parsed)
+# ============================================================
+def build_txt_file_from_data(course_title, slides_data):
+    """
+    Build the TXT file from slide data that was extracted in the browser.
+    Each item in slides_data is a dict with 'visible' and 'notes' keys.
+    """
+    lines = []
+    lines.append(course_title.upper())
+    lines.append("Full course content for AI instructor")
+    lines.append("=" * 70)
+    lines.append("")
+    lines.append("")
+
+    for i, slide in enumerate(slides_data, 1):
+        lines.append(f"=== SLIDE {i} ===")
+        lines.append("")
+        lines.append("Visible content on slide:")
+        visible = slide.get('visible', '').strip()
+        lines.append(visible if visible else "(no visible text)")
+        lines.append("")
+        lines.append("Speaker notes (how to teach this slide):")
+        notes = slide.get('notes', '').strip()
+        lines.append(notes if notes else "(no speaker notes)")
+        lines.append("")
+        lines.append("-" * 70)
+        lines.append("")
+
+    return '\n'.join(lines)
+
+
+# ============================================================
 # BUILDER: the ElevenLabs catalog snippet
 # ============================================================
 def build_elevenlabs_snippet(course_info, total_slides, pdf_filename, txt_filename):

@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import CourseForm from './components/CourseForm'
 import ResultPanel from './components/ResultPanel'
+import { extractSlideData } from './lib/pptxNotes'
 
 function App() {
-  // Stages: 'form' | 'creating_job' | 'uploading' | 'converting' | 'done'
+  // Stages: 'form' | 'reading' | 'creating_job' | 'uploading' | 'converting' | 'done'
   const [stage, setStage] = useState('form')
   const [statusMessage, setStatusMessage] = useState('')
   const [result, setResult] = useState(null)
@@ -13,7 +14,12 @@ function App() {
     setErrorMessage('')
 
     try {
-      // ----- Step 1: ask our backend for a CloudConvert upload URL -----
+      // ----- Step 1: read .pptx in the browser, extract notes -----
+      setStage('reading')
+      setStatusMessage('Reading your slides…')
+      const slideData = await extractSlideData(pptxFile)
+
+      // ----- Step 2: ask backend for a CloudConvert upload URL -----
       setStage('creating_job')
       setStatusMessage('Preparing upload…')
 
@@ -24,12 +30,11 @@ function App() {
       }
       const jobInfo = await jobResponse.json()
 
-      // ----- Step 2: upload directly to CloudConvert -----
+      // ----- Step 3: upload directly to CloudConvert -----
       setStage('uploading')
       setStatusMessage('Uploading your PowerPoint…')
 
       const cloudFormData = new FormData()
-      // CloudConvert wants all the form parameters first, then the file
       Object.entries(jobInfo.upload_parameters).forEach(([key, value]) => {
         cloudFormData.append(key, value)
       })
@@ -43,20 +48,20 @@ function App() {
         throw new Error('Upload to CloudConvert failed.')
       }
 
-      // ----- Step 3: tell our backend to wait for conversion and build the ZIP -----
+      // ----- Step 4: send slide data + form fields to backend, get ZIP -----
       setStage('converting')
       setStatusMessage('Converting slides to PDF and building your package…')
 
-      const processFormData = new FormData()
-      processFormData.append('job_id', jobInfo.job_id)
-      processFormData.append('pptx', pptxFile)
-      Object.entries(fields).forEach(([key, value]) => {
-        processFormData.append(key, value)
-      })
+      const processPayload = {
+        job_id: jobInfo.job_id,
+        slide_data: slideData,
+        fields: fields
+      }
 
       const processResponse = await fetch('/api/process', {
         method: 'POST',
-        body: processFormData
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(processPayload)
       })
       if (!processResponse.ok) {
         const errorText = await processResponse.text()
@@ -84,7 +89,7 @@ function App() {
     setStatusMessage('')
   }
 
-  const workingStages = ['creating_job', 'uploading', 'converting']
+  const workingStages = ['reading', 'creating_job', 'uploading', 'converting']
 
   return (
     <div className="container">
@@ -122,7 +127,7 @@ function App() {
       </main>
 
       <footer>
-        <p>AI Learning Alliance · v0.2.0</p>
+        <p>AI Learning Alliance · v0.3.0</p>
       </footer>
     </div>
   )
