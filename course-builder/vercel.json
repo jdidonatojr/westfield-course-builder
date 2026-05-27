@@ -3,8 +3,8 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
-    "api/*.py": {
-      "runtime": "python3.11"
+    "api/**/*.py": {
+      "runtime": "@vercel/python@4.3.1"
     }
   }
 }
