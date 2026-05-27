@@ -75,13 +75,18 @@ function App() {
 
       const packageData = await processResponse.json()
 
-      // ----- Step 5: download PDF directly from CloudConvert -----
+      // ----- Step 5: download PDF from CloudConvert via our streaming proxy -----
       setStage('downloading')
       setStatusMessage('Downloading PDF…')
 
-      const pdfResponse = await fetch(packageData.pdf_url)
+      const pdfResponse = await fetch('/api/get_pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: packageData.job_id })
+      })
       if (!pdfResponse.ok) {
-        throw new Error('Could not download the PDF from CloudConvert.')
+        const errorText = await pdfResponse.text()
+        throw new Error(errorText || 'Could not download the PDF.')
       }
       const pdfBlob = await pdfResponse.blob()
 

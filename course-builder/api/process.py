@@ -1,10 +1,10 @@
 """
-AILA Course Builder — Step 4 of the upload flow (v7+)
+AILA Course Builder — Step 4 of the upload flow (v7.1)
 
-Returns a small JSON payload with the PDF URL from CloudConvert and all
-the text content. The browser uses that to download the PDF directly
-from CloudConvert and build the ZIP locally. This bypasses Vercel's
-4.5 MB response-size limit.
+Returns JSON with text content + a Vercel-hosted PDF URL.
+The browser fetches the PDF from /api/get_pdf which streams from
+CloudConvert, then builds the ZIP locally. This avoids the 4.5 MB
+fixed-response limit AND CloudConvert URL expiration issues.
 
 POST /api/process
   JSON body:
@@ -16,14 +16,14 @@ POST /api/process
 
 Returns: JSON
     {
-      "pdf_url": "https://...",
-      "pdf_filename": "Course-Name.pdf",
-      "txt_filename": "Course-Name.txt",
+      "job_id": "...",            (browser passes back to /api/get_pdf)
+      "pdf_filename": "...",
+      "txt_filename": "...",
       "txt_content": "...",
       "elevenlabs_snippet": "...",
       "yola_snippet": "...",
       "checklist": "...",
-      "filename_base": "Course-Name"
+      "filename_base": "..."
     }
 """
 
@@ -69,7 +69,6 @@ class handler(BaseHTTPRequestHandler):
                     self._send_error(400, f'Missing required field: {f}')
                     return
 
-            # Build course info
             course_info = {
                 'course_number': fields['course_number'].strip(),
                 'course_title': fields['course_title'].strip(),
@@ -87,7 +86,6 @@ class handler(BaseHTTPRequestHandler):
 
             total_slides = slide_data.get('totalSlides', len(slide_data['slides']))
 
-            # Build all text outputs
             filename_base = make_filename(course_info['course_title'])
             pdf_filename = f"{filename_base}.pdf"
             txt_filename = f"{filename_base}.txt"
@@ -106,17 +104,17 @@ class handler(BaseHTTPRequestHandler):
                 course_info, pdf_filename, txt_filename
             )
 
-            # Get PDF URL from CloudConvert (don't download it on Vercel!)
+            # Wait for CloudConvert to finish - browser will fetch via /api/get_pdf
             api_key = os.environ.get('CLOUDCONVERT_API_KEY', '')
             if not api_key:
                 self._send_error(500, 'CloudConvert API key not configured.')
                 return
 
-            pdf_url = wait_for_pdf_url(payload['job_id'], api_key)
+            # Just wait until the job is finished; don't download anything here
+            wait_for_job_finished(payload['job_id'], api_key)
 
-            # Send small JSON response
             response_payload = {
-                'pdf_url': pdf_url,
+                'job_id': payload['job_id'],
                 'pdf_filename': pdf_filename,
                 'txt_filename': txt_filename,
                 'txt_content': txt_content,
@@ -144,30 +142,21 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(message.encode('utf-8'))
 
 
-def wait_for_pdf_url(job_id, api_key):
-    """
-    Poll CloudConvert until the PDF is ready, then return the download URL
-    (don't download the file itself - the browser will do that).
-    """
+def wait_for_job_finished(job_id, api_key):
+    """Poll CloudConvert until the job is finished. Doesn't download anything."""
     job_status_url = f'https://api.cloudconvert.com/v2/jobs/{job_id}'
     headers = {'Authorization': f'Bearer {api_key}'}
 
     max_attempts = 60
     for attempt in range(max_attempts):
         time.sleep(2)
-
         req = urllib.request.Request(job_status_url, headers=headers)
         with urllib.request.urlopen(req, timeout=30) as response:
-            job_status_data = json.loads(response.read().decode('utf-8'))['data']
+            job_data = json.loads(response.read().decode('utf-8'))['data']
 
-        status = job_status_data['status']
-
+        status = job_data['status']
         if status == 'finished':
-            for task in job_status_data['tasks']:
-                if task['name'] == 'export-task' and task['status'] == 'finished':
-                    return task['result']['files'][0]['url']
-            raise Exception('Job finished but no PDF URL found.')
-
+            return
         if status == 'error':
             raise Exception('CloudConvert job failed.')
 
