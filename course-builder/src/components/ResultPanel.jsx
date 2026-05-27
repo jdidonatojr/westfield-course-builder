@@ -1,6 +1,10 @@
 import React from 'react'
 
-function ResultPanel({ downloadUrl, onReset }) {
+function ResultPanel({ downloadUrl, filenameBase, onReset }) {
+  const downloadFilename = filenameBase
+    ? `${filenameBase}-package.zip`
+    : 'course-package.zip'
+
   return (
     <div className="card">
       <h2>✅ Course package ready</h2>
@@ -11,7 +15,7 @@ function ResultPanel({ downloadUrl, onReset }) {
 
       <a
         href={downloadUrl}
-        download="course-package.zip"
+        download={downloadFilename}
         className="primary-button download-link"
       >
         Download ZIP

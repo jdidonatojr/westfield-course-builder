@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
+import JSZip from 'jszip'
 import CourseForm from './components/CourseForm'
 import ResultPanel from './components/ResultPanel'
 import { extractSlideData } from './lib/pptxNotes'
 
 function App() {
-  // Stages: 'form' | 'reading' | 'creating_job' | 'uploading' | 'converting' | 'done'
+  // Stages: 'form' | 'reading' | 'creating_job' | 'uploading' |
+  //         'converting' | 'downloading' | 'zipping' | 'done'
   const [stage, setStage] = useState('form')
   const [statusMessage, setStatusMessage] = useState('')
   const [result, setResult] = useState(null)
@@ -51,9 +53,9 @@ function App() {
         throw new Error('Upload to CloudConvert failed.')
       }
 
-      // ----- Step 4: send slide data + form fields to backend, get ZIP -----
+      // ----- Step 4: wait for conversion, get back text outputs + PDF URL -----
       setStage('converting')
-      setStatusMessage('Converting slides to PDF and building your package…')
+      setStatusMessage('Converting slides to PDF…')
 
       const processPayload = {
         job_id: jobInfo.job_id,
@@ -71,10 +73,36 @@ function App() {
         throw new Error(errorText || 'Processing failed.')
       }
 
-      const blob = await processResponse.blob()
-      const downloadUrl = URL.createObjectURL(blob)
+      const packageData = await processResponse.json()
 
-      setResult({ downloadUrl })
+      // ----- Step 5: download PDF directly from CloudConvert -----
+      setStage('downloading')
+      setStatusMessage('Downloading PDF…')
+
+      const pdfResponse = await fetch(packageData.pdf_url)
+      if (!pdfResponse.ok) {
+        throw new Error('Could not download the PDF from CloudConvert.')
+      }
+      const pdfBlob = await pdfResponse.blob()
+
+      // ----- Step 6: build the ZIP locally in the browser -----
+      setStage('zipping')
+      setStatusMessage('Building your package…')
+
+      const zip = new JSZip()
+      zip.file(packageData.pdf_filename, pdfBlob)
+      zip.file(packageData.txt_filename, packageData.txt_content)
+      zip.file('elevenlabs-snippet.txt', packageData.elevenlabs_snippet)
+      zip.file('yola-snippet.txt', packageData.yola_snippet)
+      zip.file('assembly-checklist.txt', packageData.checklist)
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const downloadUrl = URL.createObjectURL(zipBlob)
+
+      setResult({
+        downloadUrl,
+        filenameBase: packageData.filename_base
+      })
       setStage('done')
     } catch (err) {
       setErrorMessage(err.message)
@@ -92,7 +120,10 @@ function App() {
     setStatusMessage('')
   }
 
-  const workingStages = ['reading', 'creating_job', 'uploading', 'converting']
+  const workingStages = [
+    'reading', 'creating_job', 'uploading',
+    'converting', 'downloading', 'zipping'
+  ]
 
   return (
     <div className="container">
@@ -124,13 +155,14 @@ function App() {
         {stage === 'done' && (
           <ResultPanel
             downloadUrl={result.downloadUrl}
+            filenameBase={result.filenameBase}
             onReset={handleReset}
           />
         )}
       </main>
 
       <footer>
-        <p>AI Learning Alliance · v0.3.0</p>
+        <p>AI Learning Alliance · v0.4.0</p>
       </footer>
     </div>
   )
