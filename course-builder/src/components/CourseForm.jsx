@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { extractSlideData } from '../lib/pptxNotes'
 
 function CourseForm({ onSubmit, errorMessage }) {
   const [courseNumber, setCourseNumber] = useState('')
@@ -8,27 +9,84 @@ function CourseForm({ onSubmit, errorMessage }) {
   const [sectionMap, setSectionMap] = useState('')
   const [teachingNotes, setTeachingNotes] = useState('')
   const [pptxFile, setPptxFile] = useState(null)
+  const [slideData, setSlideData] = useState(null)
+  const [readingFile, setReadingFile] = useState(false)
+  const [suggestingSection, setSuggestingSection] = useState(false)
+  const [suggestingNotes, setSuggestingNotes] = useState(false)
+  const [suggestError, setSuggestError] = useState('')
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0]
-    if (file) {
-      // Auto-fill the course title from the filename if it's empty
-      if (!courseTitle) {
-        const guessedTitle = file.name
-          .replace(/\.pptx$/i, '')
-          .replace(/^\[?(Presentation|Handout)\]?\s*/i, '')
-          .replace(/[_-]+/g, ' ')
-          .trim()
-        setCourseTitle(guessedTitle)
+    if (!file) return
+
+    // Auto-fill the course title from the filename if it's empty
+    if (!courseTitle) {
+      const guessedTitle = file.name
+        .replace(/\.pptx$/i, '')
+        .replace(/^\[?(Presentation|Handout)\]?\s*/i, '')
+        .replace(/[_-]+/g, ' ')
+        .trim()
+      setCourseTitle(guessedTitle)
+    }
+    setPptxFile(file)
+
+    // Read the file in the background so Suggest buttons work right away
+    setReadingFile(true)
+    setSlideData(null)
+    setSuggestError('')
+    try {
+      const data = await extractSlideData(file)
+      setSlideData(data)
+    } catch (err) {
+      setSuggestError('Could not read the PowerPoint file.')
+    } finally {
+      setReadingFile(false)
+    }
+  }
+
+  const requestSuggestion = async (type) => {
+    if (!slideData) {
+      setSuggestError('Please upload a PowerPoint file first.')
+      return
+    }
+    setSuggestError('')
+
+    if (type === 'section_map') setSuggestingSection(true)
+    else setSuggestingNotes(true)
+
+    try {
+      const response = await fetch('/api/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: type,
+          slide_data: slideData,
+          course_title: courseTitle || pptxFile?.name || ''
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Suggestion failed.')
       }
-      setPptxFile(file)
+
+      const data = await response.json()
+      if (type === 'section_map') {
+        setSectionMap(data.suggestion)
+      } else {
+        setTeachingNotes(data.suggestion)
+      }
+    } catch (err) {
+      setSuggestError(err.message)
+    } finally {
+      if (type === 'section_map') setSuggestingSection(false)
+      else setSuggestingNotes(false)
     }
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
 
-    // Pass the file and field values up to the parent component
     const fields = {
       course_number: courseNumber,
       course_title: courseTitle,
@@ -38,7 +96,7 @@ function CourseForm({ onSubmit, errorMessage }) {
       teaching_notes: teachingNotes
     }
 
-    onSubmit(pptxFile, fields)
+    onSubmit(pptxFile, fields, slideData)
   }
 
   const isReady =
@@ -48,7 +106,8 @@ function CourseForm({ onSubmit, errorMessage }) {
     courseType &&
     audience &&
     sectionMap &&
-    teachingNotes
+    teachingNotes &&
+    !readingFile
 
   return (
     <form onSubmit={handleSubmit} className="card">
@@ -64,6 +123,12 @@ function CourseForm({ onSubmit, errorMessage }) {
         </div>
       )}
 
+      {suggestError && (
+        <div className="error-message">
+          <strong>Suggestion error:</strong> {suggestError}
+        </div>
+      )}
+
       {/* PPTX file upload */}
       <div className="field">
         <label htmlFor="pptx">PowerPoint file (.pptx)</label>
@@ -75,7 +140,11 @@ function CourseForm({ onSubmit, errorMessage }) {
           required
         />
         {pptxFile && (
-          <small className="hint">Selected: {pptxFile.name}</small>
+          <small className="hint">
+            Selected: {pptxFile.name}
+            {readingFile && ' · reading slides…'}
+            {slideData && !readingFile && ` · ${slideData.totalSlides} slides ready`}
+          </small>
         )}
       </div>
 
@@ -140,7 +209,17 @@ function CourseForm({ onSubmit, errorMessage }) {
 
       {/* Section map */}
       <div className="field">
-        <label htmlFor="section_map">Section map</label>
+        <div className="label-row">
+          <label htmlFor="section_map">Section map</label>
+          <button
+            type="button"
+            className="suggest-button"
+            onClick={() => requestSuggestion('section_map')}
+            disabled={!slideData || suggestingSection}
+          >
+            {suggestingSection ? 'Thinking…' : '✨ Suggest from slides'}
+          </button>
+        </div>
         <textarea
           id="section_map"
           rows="7"
@@ -160,7 +239,17 @@ Recap (slides 22-25)`}
 
       {/* Teaching notes */}
       <div className="field">
-        <label htmlFor="teaching_notes">Teaching notes</label>
+        <div className="label-row">
+          <label htmlFor="teaching_notes">Teaching notes</label>
+          <button
+            type="button"
+            className="suggest-button"
+            onClick={() => requestSuggestion('teaching_notes')}
+            disabled={!slideData || suggestingNotes}
+          >
+            {suggestingNotes ? 'Thinking…' : '✨ Suggest from slides'}
+          </button>
+        </div>
         <textarea
           id="teaching_notes"
           rows="6"

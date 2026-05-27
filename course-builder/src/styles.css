@@ -84,6 +84,38 @@ main {
   color: #1a4d7c;
 }
 
+/* Row that holds a label and a Suggest button side-by-side */
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.label-row label {
+  margin-bottom: 0;
+}
+
+.suggest-button {
+  background: #f0f4f9;
+  color: #1a4d7c;
+  border: 1px solid #c9d4e3;
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.suggest-button:hover:not(:disabled) {
+  background: #e2ecf6;
+}
+
+.suggest-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .field input[type="text"],
 .field input[type="number"],
 .field textarea {

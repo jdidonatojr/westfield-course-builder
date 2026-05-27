@@ -10,14 +10,17 @@ function App() {
   const [result, setResult] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
 
-  const handleSubmit = async (pptxFile, fields) => {
+  const handleSubmit = async (pptxFile, fields, preparsedSlideData) => {
     setErrorMessage('')
 
     try {
-      // ----- Step 1: read .pptx in the browser, extract notes -----
-      setStage('reading')
-      setStatusMessage('Reading your slides…')
-      const slideData = await extractSlideData(pptxFile)
+      // ----- Step 1: parse the .pptx if not already done -----
+      let slideData = preparsedSlideData
+      if (!slideData) {
+        setStage('reading')
+        setStatusMessage('Reading your slides…')
+        slideData = await extractSlideData(pptxFile)
+      }
 
       // ----- Step 2: ask backend for a CloudConvert upload URL -----
       setStage('creating_job')
