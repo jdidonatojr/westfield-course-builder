@@ -109,6 +109,10 @@ main {
   resize: vertical;
   font-family: monospace;
   font-size: 0.9rem;
+  text-indent: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.5;
 }
 
 .field input[type="file"] {

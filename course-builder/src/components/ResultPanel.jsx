@@ -23,11 +23,11 @@ function ResultPanel({ downloadUrl, onReset }) {
         <li><strong>Course-Name.txt</strong> — instructor notes for the agent</li>
         <li><strong>elevenlabs-snippet.txt</strong> — paste into ElevenLabs system prompt</li>
         <li><strong>yola-snippet.txt</strong> — paste into Yola page code</li>
-        <li><strong>assembly-checklist.md</strong> — step-by-step instructions</li>
+        <li><strong>assembly-checklist.txt</strong> — step-by-step instructions</li>
       </ul>
 
       <p className="next-steps-tip">
-        Open <strong>assembly-checklist.md</strong> first — it walks you through
+        Open <strong>assembly-checklist.txt</strong> first — it walks you through
         exactly where each file goes.
       </p>
 

@@ -3,32 +3,67 @@ import CourseForm from './components/CourseForm'
 import ResultPanel from './components/ResultPanel'
 
 function App() {
-  // Three possible states:
-  //   'form'      - showing the upload form
-  //   'working'   - processing the upload
-  //   'done'      - showing the result with download
+  // Stages: 'form' | 'creating_job' | 'uploading' | 'converting' | 'done'
   const [stage, setStage] = useState('form')
+  const [statusMessage, setStatusMessage] = useState('')
   const [result, setResult] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
 
-  // Called when the user submits the form
-  const handleSubmit = async (formData) => {
-    setStage('working')
+  const handleSubmit = async (pptxFile, fields) => {
     setErrorMessage('')
 
     try {
-      const response = await fetch('/api/process', {
-        method: 'POST',
-        body: formData  // multipart form data with the .pptx and fields
-      })
+      // ----- Step 1: ask our backend for a CloudConvert upload URL -----
+      setStage('creating_job')
+      setStatusMessage('Preparing upload…')
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || 'Something went wrong on the server.')
+      const jobResponse = await fetch('/api/create_job', { method: 'POST' })
+      if (!jobResponse.ok) {
+        const errorText = await jobResponse.text()
+        throw new Error(errorText || 'Could not start the upload.')
+      }
+      const jobInfo = await jobResponse.json()
+
+      // ----- Step 2: upload directly to CloudConvert -----
+      setStage('uploading')
+      setStatusMessage('Uploading your PowerPoint…')
+
+      const cloudFormData = new FormData()
+      // CloudConvert wants all the form parameters first, then the file
+      Object.entries(jobInfo.upload_parameters).forEach(([key, value]) => {
+        cloudFormData.append(key, value)
+      })
+      cloudFormData.append('file', pptxFile)
+
+      const uploadResponse = await fetch(jobInfo.upload_url, {
+        method: 'POST',
+        body: cloudFormData
+      })
+      if (!uploadResponse.ok) {
+        throw new Error('Upload to CloudConvert failed.')
       }
 
-      // The response is the ZIP file itself
-      const blob = await response.blob()
+      // ----- Step 3: tell our backend to wait for conversion and build the ZIP -----
+      setStage('converting')
+      setStatusMessage('Converting slides to PDF and building your package…')
+
+      const processFormData = new FormData()
+      processFormData.append('job_id', jobInfo.job_id)
+      processFormData.append('pptx', pptxFile)
+      Object.entries(fields).forEach(([key, value]) => {
+        processFormData.append(key, value)
+      })
+
+      const processResponse = await fetch('/api/process', {
+        method: 'POST',
+        body: processFormData
+      })
+      if (!processResponse.ok) {
+        const errorText = await processResponse.text()
+        throw new Error(errorText || 'Processing failed.')
+      }
+
+      const blob = await processResponse.blob()
       const downloadUrl = URL.createObjectURL(blob)
 
       setResult({ downloadUrl })
@@ -39,7 +74,6 @@ function App() {
     }
   }
 
-  // Called when the user wants to start over
   const handleReset = () => {
     if (result?.downloadUrl) {
       URL.revokeObjectURL(result.downloadUrl)
@@ -47,7 +81,10 @@ function App() {
     setResult(null)
     setStage('form')
     setErrorMessage('')
+    setStatusMessage('')
   }
+
+  const workingStages = ['creating_job', 'uploading', 'converting']
 
   return (
     <div className="container">
@@ -66,12 +103,12 @@ function App() {
           />
         )}
 
-        {stage === 'working' && (
+        {workingStages.includes(stage) && (
           <div className="card">
-            <h2>Processing your deck…</h2>
+            <h2>{statusMessage}</h2>
             <p>
-              Reading the slides, extracting notes, converting to PDF, and
-              building the package. This usually takes 30 seconds.
+              This can take up to a minute for large decks. Please don't close
+              this tab.
             </p>
           </div>
         )}
@@ -85,7 +122,7 @@ function App() {
       </main>
 
       <footer>
-        <p>AI Learning Alliance · v0.1.0</p>
+        <p>AI Learning Alliance · v0.2.0</p>
       </footer>
     </div>
   )

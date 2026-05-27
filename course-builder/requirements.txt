@@ -2,6 +2,3 @@
 
 # Reading PowerPoint files
 python-pptx==1.0.2
-
-# HTTP requests (for CloudConvert API)
-requests==2.32.3

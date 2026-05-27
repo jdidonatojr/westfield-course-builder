@@ -28,17 +28,17 @@ function CourseForm({ onSubmit, errorMessage }) {
   const handleSubmit = (e) => {
     e.preventDefault()
 
-    // Build the form data to send to the backend
-    const formData = new FormData()
-    formData.append('pptx', pptxFile)
-    formData.append('course_number', courseNumber)
-    formData.append('course_title', courseTitle)
-    formData.append('course_type', courseType)
-    formData.append('audience', audience)
-    formData.append('section_map', sectionMap)
-    formData.append('teaching_notes', teachingNotes)
+    // Pass the file and field values up to the parent component
+    const fields = {
+      course_number: courseNumber,
+      course_title: courseTitle,
+      course_type: courseType,
+      audience: audience,
+      section_map: sectionMap,
+      teaching_notes: teachingNotes
+    }
 
-    onSubmit(formData)
+    onSubmit(pptxFile, fields)
   }
 
   const isReady =
