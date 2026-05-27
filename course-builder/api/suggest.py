@@ -162,7 +162,7 @@ class handler(BaseHTTPRequestHandler):
 
             course_title = payload.get('course_title', '').strip() or 'Untitled Course'
 
-            api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+            api_key = os.environ.get('ANTHROPIC_API_KEY', '').strip()
             if not api_key:
                 self._send_error(500, 'ANTHROPIC_API_KEY not configured on the server.')
                 return
