@@ -299,6 +299,9 @@ def build_yola_snippet(course_info, total_slides, pdf_filename):
     github_base = "https://raw.githubusercontent.com/jdidonatojr/aila-course-files/main"
 
     lines = []
+    # Leading comma so the snippet can be pasted before the closing `};`
+    # without needing to edit the previous course's closing brace.
+    lines.append('    ,')
     lines.append(f'    "{course_num}": {{')
     lines.append(f"      id: '{slug}',")
     lines.append(f"      title: '{escape_js(title)}',")
@@ -397,9 +400,36 @@ Add the new course to the course library.
 
 - [ ] Open your Yola page editor
 - [ ] Find the `COURSE_LIBRARY` JavaScript object in the page code
-- [ ] Paste the content of `yola-snippet.txt` as a new entry
-- [ ] Add a comma after the previous course's closing brace if needed
-- [ ] Publish the page
+- [ ] Scroll to the BOTTOM of the COURSE_LIBRARY block
+- [ ] Find the closing `}};` that ends the library (it looks like this):
+
+```
+    "4": {{
+      ...
+      sections: [ ... ]
+    }}
+  }};          <-- this line closes the whole library
+```
+
+- [ ] Paste the content of `yola-snippet.txt` on a new line JUST BEFORE the `}};`
+- [ ] Save / publish the page
+
+The snippet starts with a leading comma. That comma is intentional — it
+separates your new course from the one before it. You do NOT need to
+edit any existing course code. Just paste in the right spot.
+
+After pasting, that section should look like this:
+
+```
+    "4": {{
+      ...
+    }}
+    ,
+    "{course_num}": {{       <-- your new course
+      ...
+    }}
+  }};
+```
 
 ---
 
@@ -420,6 +450,6 @@ Before announcing, verify everything works.
 If anything doesn't work, the most common issues are:
 - PDF not uploaded to GitHub root (slide carousel shows blank)
 - ElevenLabs knowledge base files not uploaded (agent says "I don't have that course")
-- Yola JavaScript has a syntax error (page shows error screen)
+- Yola JavaScript syntax error — pasted outside the COURSE_LIBRARY block, or pasted after the closing `}};` instead of before it. The page will show an error screen. Re-check Step 4 above.
 """
     return checklist
