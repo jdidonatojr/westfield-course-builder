@@ -167,7 +167,7 @@ function App() {
       </main>
 
       <footer>
-        <p>AI Learning Alliance · v0.4.0</p>
+        <p>AI Learning Alliance · v0.5.0</p>
       </footer>
     </div>
   )

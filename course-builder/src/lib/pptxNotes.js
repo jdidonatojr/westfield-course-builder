@@ -97,3 +97,102 @@ function extractTextFromXml(xml) {
   }
   return lines.join('\n').trim()
 }
+
+/**
+ * Parse a speaker-notes .txt file in the extractpptnotes.com format.
+ *
+ * The format looks like:
+ *   Slide 1:
+ *   ----------------------------------------
+ *   (notes text, possibly multiple paragraphs)
+ *
+ *   Slide 2:
+ *   ----------------------------------------
+ *   (notes text)
+ *
+ * @param {string} text - The full text content of the .txt file
+ * @returns {Array<string>} Array of notes strings, indexed by slide order
+ */
+export function parseNotesFile(text) {
+  // Normalize line endings
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+  // Split on "Slide N:" markers. The capturing group keeps the slide number.
+  // We use a regex that finds each "Slide N:" header at the start of a line.
+  const parts = normalized.split(/^Slide\s+(\d+):\s*$/m)
+
+  // parts looks like: ["", "1", "<notes>", "2", "<notes>", ...]
+  // Element 0 is whatever came before the first "Slide 1:" (usually blank).
+  const notesBySlide = {}
+  for (let i = 1; i < parts.length; i += 2) {
+    const slideNum = parseInt(parts[i], 10)
+    let noteBlock = parts[i + 1] || ''
+
+    // Remove a leading divider line of dashes (with optional surrounding
+    // whitespace/newlines). The export tool puts a row of dashes right
+    // after each "Slide N:" header.
+    noteBlock = noteBlock.replace(/^\s*-{3,}\s*\n?/, '')
+
+    // Trim surrounding whitespace
+    noteBlock = noteBlock.trim()
+
+    // A lone dash or empty divider remnant means "no notes"
+    if (/^-*$/.test(noteBlock)) {
+      noteBlock = ''
+    }
+
+    notesBySlide[slideNum] = noteBlock
+  }
+
+  // Convert to an ordered array (slide 1 -> index 0)
+  const slideNums = Object.keys(notesBySlide)
+    .map(n => parseInt(n, 10))
+    .sort((a, b) => a - b)
+
+  const orderedNotes = []
+  for (const num of slideNums) {
+    orderedNotes.push(notesBySlide[num])
+  }
+
+  return orderedNotes
+}
+
+/**
+ * Merge externally-supplied notes into slide data.
+ *
+ * Used when the user uploads a compressed .pptx (notes stripped) plus a
+ * separate notes .txt file. The visible content comes from the .pptx;
+ * the notes come from the .txt.
+ *
+ * STRICT: if the counts don't match, this throws an error. A mismatch
+ * would misalign the ElevenLabs widget, so we reject rather than guess.
+ *
+ * @param {Object} slideData - Result of extractSlideData()
+ * @param {Array<string>} notesArray - Result of parseNotesFile()
+ * @returns {Object} New slideData with notes overlaid
+ */
+export function mergeNotes(slideData, notesArray) {
+  const slideCount = slideData.slides.length
+  const notesCount = notesArray.length
+
+  if (slideCount !== notesCount) {
+    throw new Error(
+      `Slide count mismatch: the PowerPoint has ${slideCount} slides, ` +
+      `but the notes file has ${notesCount} slides. ` +
+      `These must match exactly. If your original deck had hidden slides, ` +
+      `remove them before extracting notes, then try again.`
+    )
+  }
+
+  const mergedSlides = slideData.slides.map((slide, i) => ({
+    visible: slide.visible,
+    notes: notesArray[i],
+    hidden: slide.hidden
+  }))
+
+  return {
+    slides: mergedSlides,
+    totalSlides: slideData.totalSlides,
+    hiddenCount: slideData.hiddenCount
+  }
+}

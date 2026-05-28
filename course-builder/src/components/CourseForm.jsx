@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { extractSlideData } from '../lib/pptxNotes'
+import { extractSlideData, parseNotesFile, mergeNotes } from '../lib/pptxNotes'
 
 function CourseForm({ onSubmit, errorMessage }) {
   const [courseNumber, setCourseNumber] = useState('')
@@ -10,10 +10,20 @@ function CourseForm({ onSubmit, errorMessage }) {
   const [teachingNotes, setTeachingNotes] = useState('')
   const [pptxFile, setPptxFile] = useState(null)
   const [slideData, setSlideData] = useState(null)
+  const [rawSlideData, setRawSlideData] = useState(null)
+  const [notesFile, setNotesFile] = useState(null)
   const [readingFile, setReadingFile] = useState(false)
   const [suggestingSection, setSuggestingSection] = useState(false)
   const [suggestingNotes, setSuggestingNotes] = useState(false)
   const [suggestError, setSuggestError] = useState('')
+  const [notesStatus, setNotesStatus] = useState('')
+
+  // Combine the parsed PPTX data with an optional notes file.
+  // Returns the slideData to use, or throws on a count mismatch.
+  const applyNotesIfPresent = (parsedPptx, notesArray) => {
+    if (!notesArray) return parsedPptx
+    return mergeNotes(parsedPptx, notesArray)
+  }
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0]
@@ -33,15 +43,69 @@ function CourseForm({ onSubmit, errorMessage }) {
     // Read the file in the background so Suggest buttons work right away
     setReadingFile(true)
     setSlideData(null)
+    setRawSlideData(null)
     setSuggestError('')
     try {
       const data = await extractSlideData(file)
-      setSlideData(data)
+      setRawSlideData(data)
+
+      // If a notes file is already loaded, re-merge against the new pptx
+      if (notesFile) {
+        await loadAndApplyNotes(notesFile, data)
+      } else {
+        setSlideData(data)
+      }
     } catch (err) {
       setSuggestError('Could not read the PowerPoint file.')
     } finally {
       setReadingFile(false)
     }
+  }
+
+  // Read a notes .txt file, parse it, and merge with the given pptx data.
+  const loadAndApplyNotes = async (file, parsedPptx) => {
+    setNotesStatus('')
+    try {
+      const text = await file.text()
+      const notesArray = parseNotesFile(text)
+
+      if (notesArray.length === 0) {
+        setNotesStatus('error')
+        setSuggestError(
+          'Could not find any "Slide N:" sections in the notes file. ' +
+          'Make sure it came from extractpptnotes.com.'
+        )
+        return
+      }
+
+      // This throws if counts don't match
+      const merged = mergeNotes(parsedPptx, notesArray)
+      setSlideData(merged)
+      setNotesStatus('ok')
+      setSuggestError('')
+    } catch (err) {
+      // Count mismatch or parse problem - reject and tell the user
+      setNotesStatus('error')
+      setSlideData(null)
+      setSuggestError(err.message)
+    }
+  }
+
+  const handleNotesFileChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) {
+      // User cleared the notes file - revert to pptx-only notes
+      setNotesFile(null)
+      setNotesStatus('')
+      if (rawSlideData) setSlideData(rawSlideData)
+      return
+    }
+    setNotesFile(file)
+
+    if (rawSlideData) {
+      await loadAndApplyNotes(file, rawSlideData)
+    }
+    // If pptx isn't loaded yet, the merge happens when it finishes reading
   }
 
   const requestSuggestion = async (type) => {
@@ -146,6 +210,28 @@ function CourseForm({ onSubmit, errorMessage }) {
             {slideData && !readingFile && ` · ${slideData.totalSlides} slides ready`}
           </small>
         )}
+      </div>
+
+      {/* Optional speaker-notes file upload (for compressed decks) */}
+      <div className="field">
+        <label htmlFor="notes_file">
+          Speaker notes file (.txt) — optional
+        </label>
+        <input
+          type="file"
+          id="notes_file"
+          accept=".txt"
+          onChange={handleNotesFileChange}
+        />
+        <small className="hint">
+          Only needed if you compressed a large deck and the notes were lost.
+          Upload the notes file from extractpptnotes.com. The slide count must
+          match the PowerPoint exactly.
+          {notesFile && notesStatus === 'ok' &&
+            ` · ✓ notes matched and applied`}
+          {notesFile && notesStatus === 'error' &&
+            ` · ✗ see error above`}
+        </small>
       </div>
 
       {/* Course number */}
