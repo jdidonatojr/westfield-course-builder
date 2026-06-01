@@ -372,7 +372,18 @@ The PDF powers the slide carousel on the Yola page.
 
 ---
 
-## Step 2 — Upload PDF and TXT to ElevenLabs
+## Step 2 — Upload the TXT to the ElevenLabs Learning Path Recommender
+
+The Learning Path Recommender uses this file to suggest this course in a learner's path.
+
+- [ ] Open the ElevenLabs Learning Path Recommender agent
+- [ ] Go to the Knowledge Base section
+- [ ] Upload `{txt_filename}`
+- [ ] Open the agent's prompt and add `{txt_filename}` to the COURSE MENU list
+
+---
+
+## Step 3 — Upload PDF and TXT to ElevenLabs
 
 The agent uses these files to teach the course.
 
@@ -383,7 +394,7 @@ The agent uses these files to teach the course.
 
 ---
 
-## Step 3 — Update the ElevenLabs system prompt
+## Step 4 — Update the ElevenLabs system prompt
 
 Add the new course to the catalog block.
 
@@ -394,7 +405,7 @@ Add the new course to the catalog block.
 
 ---
 
-## Step 4 — Update the Yola page
+## Step 5 — Update the Yola page
 
 Add the new course to the course library.
 
@@ -433,7 +444,7 @@ After pasting, that section should look like this:
 
 ---
 
-## Step 5 — Test the course
+## Step 6 — Test the course
 
 Before announcing, verify everything works.
 
@@ -450,6 +461,6 @@ Before announcing, verify everything works.
 If anything doesn't work, the most common issues are:
 - PDF not uploaded to GitHub root (slide carousel shows blank)
 - ElevenLabs knowledge base files not uploaded (agent says "I don't have that course")
-- Yola JavaScript syntax error — pasted outside the COURSE_LIBRARY block, or pasted after the closing `}};` instead of before it. The page will show an error screen. Re-check Step 4 above.
+- Yola JavaScript syntax error — pasted outside the COURSE_LIBRARY block, or pasted after the closing `}};` instead of before it. The page will show an error screen. Re-check Step 5 above.
 """
     return checklist
