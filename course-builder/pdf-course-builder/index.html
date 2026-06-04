@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AILA PDF Course Builder</title>
+<style>
+  :root {
+    --ink: #1a2230;
+    --muted: #5b6675;
+    --line: #d8dee8;
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --brand: #1a4f8b;
+    --brand-dark: #143d6b;
+    --go: #1f8f4e;
+    --go-dark: #176e3c;
+    --warn: #b3401a;
+    --focus: #2f6fb3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
+  header h1 {
+    font-size: 30px;
+    margin: 0 0 6px;
+    letter-spacing: 0.2px;
+  }
+  header p { color: var(--muted); margin: 0 0 28px; font-size: 17px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 24px 24px 26px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 2px rgba(20,40,80,0.04);
+  }
+  .step-label {
+    display: inline-block;
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--brand);
+    background: #eaf1fa;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+  }
+  h2 { font-size: 21px; margin: 0 0 14px; }
+
+  label {
+    display: block;
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 16px 0 6px;
+  }
+  .hint { font-weight: 400; color: var(--muted); font-size: 13px; }
+
+  input[type="text"], textarea, input[type="file"] {
+    width: 100%;
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 15px;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 11px 12px;
+  }
+  textarea { resize: vertical; min-height: 92px; line-height: 1.5; }
+  input:focus, textarea:focus {
+    outline: 3px solid #cfe0f5;
+    border-color: var(--focus);
+  }
+
+  .row { display: flex; gap: 18px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 220px; }
+
+  .filebox {
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 14px;
+    background: #fafbfd;
+    margin-top: 6px;
+  }
+  .filestatus {
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 13px;
+    margin-top: 8px;
+    color: var(--muted);
+  }
+  .filestatus.ok { color: var(--go-dark); font-weight: 600; }
+
+  .field-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 16px 0 6px;
+  }
+  .field-head label { margin: 0; }
+
+  button {
+    font-family: -apple-system, system-ui, sans-serif;
+    font-weight: 600;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 10px 16px;
+    transition: background 0.15s;
+  }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-suggest { background: #eaf1fa; color: var(--brand-dark); padding: 7px 12px; white-space: nowrap; }
+  .btn-suggest:hover:not(:disabled) { background: #d8e6f7; }
+  .btn-primary {
+    background: var(--brand); color: #fff;
+    font-size: 16px; padding: 14px 26px; margin-top: 22px;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--brand-dark); }
+  .btn-go { background: var(--go); color: #fff; font-size: 16px; padding: 14px 26px; }
+  .btn-go:hover:not(:disabled) { background: var(--go-dark); }
+  .btn-copy { background: #eef1f5; color: var(--ink); padding: 7px 12px; }
+  .btn-copy:hover { background: #e2e7ee; }
+
+  .status {
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    margin-top: 14px;
+    min-height: 20px;
+  }
+  .status.err { color: var(--warn); font-weight: 600; }
+  .status.busy { color: var(--brand); }
+  .status.done { color: var(--go-dark); font-weight: 600; }
+
+  #results { display: none; }
+  .result-block { margin-bottom: 20px; }
+  .result-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .result-head h3 { font-size: 16px; margin: 0; font-family: -apple-system, system-ui, sans-serif; }
+  .result-block textarea {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    min-height: 130px;
+    white-space: pre;
+    overflow: auto;
+  }
+  .download-row { margin-top: 8px; }
+  .small { font-family:-apple-system,system-ui,sans-serif; font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>AILA PDF Course Builder</h1>
+    <p>Already have a course PDF and its matching notes file? Build the course package here — no PowerPoint needed.</p>
+  </header>
+
+  <!-- STEP 1: FILES -->
+  <div class="card">
+    <span class="step-label">Step 1 · Your files</span>
+    <h2>Upload the PDF and the TXT</h2>
+
+    <label for="pdfInput">Course PDF <span class="hint">— the slides (must be the OCR-readable “Save a Copy” version)</span></label>
+    <div class="filebox">
+      <input type="file" id="pdfInput" accept="application/pdf" />
+      <div class="filestatus" id="pdfStatus">No PDF chosen yet.</div>
+    </div>
+
+    <label for="txtInput">Instructor notes (TXT) <span class="hint">— the matching teaching-notes file</span></label>
+    <div class="filebox">
+      <input type="file" id="txtInput" accept=".txt,text/plain" />
+      <div class="filestatus" id="txtStatus">No TXT chosen yet.</div>
+    </div>
+  </div>
+
+  <!-- STEP 2: DETAILS -->
+  <div class="card">
+    <span class="step-label">Step 2 · Course details</span>
+    <h2>Tell the tool about this course</h2>
+
+    <div class="row">
+      <div>
+        <label for="courseNumber">Course number <span class="hint">(e.g. 19)</span></label>
+        <input type="text" id="courseNumber" placeholder="19" />
+      </div>
+      <div>
+        <label for="courseTitle">Course title</label>
+        <input type="text" id="courseTitle" placeholder="Make Your Website Work for You" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="courseType">Course type <span class="hint">(e.g. Self-paced)</span></label>
+        <input type="text" id="courseType" placeholder="Self-paced" />
+      </div>
+      <div>
+        <label for="audience">Audience</label>
+        <input type="text" id="audience" placeholder="Small business owners" />
+      </div>
+    </div>
+
+    <div class="field-head">
+      <label for="sectionMap">Section map <span class="hint">— one section per line, e.g. “Introduction (slides 1-4)”</span></label>
+      <button type="button" class="btn-suggest" id="suggestSection">✨ Suggest from slides</button>
+    </div>
+    <textarea id="sectionMap" placeholder="Introduction (slides 1-4)&#10;Search Optimization (slides 13-19)&#10;Recap and Resources (slides 37-44)"></textarea>
+
+    <div class="field-head">
+      <label for="teachingNotes">Teaching notes <span class="hint">— one tip per line</span></label>
+      <button type="button" class="btn-suggest" id="suggestNotes">✨ Suggest from slides</button>
+    </div>
+    <textarea id="teachingNotes" placeholder="Open with reassurance — many learners feel behind on this topic.&#10;Slow down on the security section."></textarea>
+  </div>
+
+  <!-- STEP 3: GENERATE -->
+  <div class="card">
+    <span class="step-label">Step 3 · Build it</span>
+    <h2>Generate the course package</h2>
+    <p class="small">This creates the ElevenLabs snippet, the Yola snippet, and the assembly checklist, then bundles your PDF and TXT into a ZIP.</p>
+    <button type="button" class="btn-primary" id="generateBtn">Generate course package</button>
+    <div class="status" id="genStatus" aria-live="polite"></div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="card" id="results">
+    <span class="step-label">Done · Your package</span>
+    <h2>Copy the snippets, then download the ZIP</h2>
+
+    <div class="download-row">
+      <button type="button" class="btn-go" id="downloadBtn">⬇ Download course ZIP</button>
+      <span class="small" id="zipNote"></span>
+    </div>
+
+    <div class="result-block" style="margin-top:22px;">
+      <div class="result-head"><h3>Yola snippet (paste into COURSE_LIBRARY)</h3><button type="button" class="btn-copy" data-copy="yolaOut">Copy</button></div>
+      <textarea id="yolaOut" readonly></textarea>
+    </div>
+
+    <div class="result-block">
+      <div class="result-head"><h3>ElevenLabs snippet (paste into the system prompt)</h3><button type="button" class="btn-copy" data-copy="elevenOut">Copy</button></div>
+      <textarea id="elevenOut" readonly></textarea>
+    </div>
+
+    <div class="result-block">
+      <div class="result-head"><h3>Assembly checklist</h3><button type="button" class="btn-copy" data-copy="checklistOut">Copy</button></div>
+      <textarea id="checklistOut" readonly></textarea>
+    </div>
+  </div>
+
+</div>
+
+<!-- Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // ---- State ----
+  var pdfFile = null;       // the uploaded PDF (Blob) — used for the ZIP
+  var pdfDoc = null;        // loaded PDF.js document — used for page count + text
+  var totalSlides = 0;
+  var txtFile = null;       // the uploaded TXT (Blob)
+  var txtText = '';         // its text — used for the ZIP
+  var slideTextCache = null;
+  var built = null;         // the /api/build response
+
+  function $(id) { return document.getElementById(id); }
+
+  function setStatus(el, msg, cls) {
+    el.textContent = msg || '';
+    el.className = 'status' + (cls ? ' ' + cls : '');
+  }
+
+  // ---- PDF upload: read page count ----
+  $('pdfInput').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    pdfFile = file;
+    pdfDoc = null;
+    totalSlides = 0;
+    slideTextCache = null;
+    $('pdfStatus').textContent = 'Reading the PDF…';
+    $('pdfStatus').className = 'filestatus';
+
+    file.arrayBuffer().then(function (buf) {
+      return pdfjsLib.getDocument({ data: buf }).promise;
+    }).then(function (doc) {
+      pdfDoc = doc;
+      totalSlides = doc.numPages;
+      $('pdfStatus').textContent = '✓ ' + file.name + ' — detected ' + totalSlides + ' slides';
+      $('pdfStatus').className = 'filestatus ok';
+    }).catch(function (err) {
+      $('pdfStatus').textContent = 'Could not read that PDF: ' + err.message;
+      $('pdfStatus').className = 'filestatus';
+      pdfFile = null;
+    });
+  });
+
+  // ---- TXT upload ----
+  $('txtInput').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    txtFile = file;
+    file.text().then(function (t) {
+      txtText = t;
+      $('txtStatus').textContent = '✓ ' + file.name + ' — ' + Math.round(t.length / 1024) + ' KB';
+      $('txtStatus').className = 'filestatus ok';
+    });
+  });
+
+  // ---- Pull text out of every PDF page (for the suggest helper) ----
+  function getSlideText() {
+    if (slideTextCache) return Promise.resolve(slideTextCache);
+    if (!pdfDoc) return Promise.reject(new Error('Load the PDF first.'));
+    var slides = [];
+    var chain = Promise.resolve();
+    var _loop = function (n) {
+      chain = chain.then(function () {
+        return pdfDoc.getPage(n).then(function (page) {
+          return page.getTextContent();
+        }).then(function (tc) {
+          var txt = tc.items.map(function (i) { return i.str; }).join(' ').trim();
+          slides.push({ visible: txt });
+        });
+      });
+    };
+    for (var n = 1; n <= pdfDoc.numPages; n++) { _loop(n); }
+    return chain.then(function () { slideTextCache = slides; return slides; });
+  }
+
+  // ---- Suggest (section map / teaching notes) ----
+  function runSuggest(type, targetId, button) {
+    if (!pdfDoc) { alert('Please upload the PDF first — the suggestions are drawn from its text.'); return; }
+    var title = $('courseTitle').value.trim() || 'Untitled Course';
+    var original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Thinking…';
+    getSlideText().then(function (slides) {
+      return fetch('/api/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: type, slide_data: { slides: slides }, course_title: title })
+      });
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+      return r.json();
+    }).then(function (data) {
+      $(targetId).value = (data.suggestion || '').trim();
+    }).catch(function (err) {
+      alert('Could not get a suggestion: ' + err.message);
+    }).then(function () {
+      button.disabled = false;
+      button.textContent = original;
+    });
+  }
+
+  $('suggestSection').addEventListener('click', function () {
+    runSuggest('section_map', 'sectionMap', this);
+  });
+  $('suggestNotes').addEventListener('click', function () {
+    runSuggest('teaching_notes', 'teachingNotes', this);
+  });
+
+  // ---- Generate ----
+  $('generateBtn').addEventListener('click', function () {
+    var s = $('genStatus');
+    if (!pdfFile || !pdfDoc) { setStatus(s, 'Please upload the course PDF first.', 'err'); return; }
+    if (!txtFile) { setStatus(s, 'Please upload the instructor-notes TXT first.', 'err'); return; }
+
+    var fields = {
+      course_number: $('courseNumber').value,
+      course_title: $('courseTitle').value,
+      course_type: $('courseType').value,
+      audience: $('audience').value,
+      section_map: $('sectionMap').value,
+      teaching_notes: $('teachingNotes').value
+    };
+    var missing = [];
+    if (!fields.course_number.trim()) missing.push('course number');
+    if (!fields.course_title.trim()) missing.push('course title');
+    if (!fields.course_type.trim()) missing.push('course type');
+    if (!fields.audience.trim()) missing.push('audience');
+    if (!fields.section_map.trim()) missing.push('section map');
+    if (!fields.teaching_notes.trim()) missing.push('teaching notes');
+    if (missing.length) { setStatus(s, 'Please fill in: ' + missing.join(', ') + '.', 'err'); return; }
+
+    setStatus(s, 'Building the package…', 'busy');
+    $('generateBtn').disabled = true;
+
+    fetch('/api/build', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ total_slides: totalSlides, fields: fields })
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+      return r.json();
+    }).then(function (data) {
+      built = data;
+      $('yolaOut').value = data.yola_snippet;
+      $('elevenOut').value = data.elevenlabs_snippet;
+      $('checklistOut').value = data.checklist;
+      $('zipNote').textContent = 'Contains ' + data.pdf_filename + ', ' + data.txt_filename + ', and assembly-checklist.txt';
+      $('results').style.display = 'block';
+      setStatus(s, '✓ Package ready — see below.', 'done');
+      $('results').scrollIntoView({ behavior: 'smooth' });
+    }).catch(function (err) {
+      setStatus(s, 'Something went wrong: ' + err.message, 'err');
+    }).then(function () {
+      $('generateBtn').disabled = false;
+    });
+  });
+
+  // ---- Download ZIP (renames the files to match the snippet) ----
+  $('downloadBtn').addEventListener('click', function () {
+    if (!built) return;
+    var zip = new JSZip();
+    zip.file(built.pdf_filename, pdfFile);          // the PDF you uploaded
+    zip.file(built.txt_filename, txtText);          // the TXT you uploaded
+    zip.file('assembly-checklist.txt', built.checklist);
+    zip.generateAsync({ type: 'blob' }).then(function (blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = built.filename_base + '-course-package.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  });
+
+  // ---- Copy buttons ----
+  Array.prototype.forEach.call(document.querySelectorAll('.btn-copy'), function (btn) {
+    btn.addEventListener('click', function () {
+      var ta = $(btn.getAttribute('data-copy'));
+      navigator.clipboard.writeText(ta.value).then(function () {
+        var t = btn.textContent; btn.textContent = 'Copied ✓';
+        setTimeout(function () { btn.textContent = t; }, 1500);
+      });
+    });
+  });
+
+})();
+</script>
+</body>
+</html>

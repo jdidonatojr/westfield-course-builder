@@ -1,0 +1,5 @@
+# Python dependencies for the API serverless functions.
+# processor.py imports python-pptx when it loads (it's shared, unchanged,
+# with the PPTX tool), so the package must be present even though this
+# tool never parses a PowerPoint file.
+python-pptx==1.0.2
