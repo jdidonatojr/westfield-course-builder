@@ -316,7 +316,7 @@ class handler(BaseHTTPRequestHandler):
                 return self._finish(False, steps, None)
 
             # ---------- STEP 5: live link ----------
-            live_url = player_base.rstrip('/') + '/?course=' + course_id
+            live_url = player_base.rstrip('/') + '/?course=' + course_number
             record('5_live_link', 'built', live_url)
 
             return self._finish(True, steps, live_url)
