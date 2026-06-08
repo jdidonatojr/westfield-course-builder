@@ -168,8 +168,12 @@ class handler(BaseHTTPRequestHandler):
                 course_number = existing_key
                 action = 'updated'
             else:
-                numbers = [int(k) for k in data.keys() if str(k).isdigit()]
-                course_number = str(max(numbers) + 1) if numbers else '1'
+                # Pick the smallest whole number not already used (1, 2, 3, ...).
+                used = set(int(k) for k in data.keys() if str(k).isdigit())
+                n = 1
+                while n in used:
+                    n += 1
+                course_number = str(n)
                 action = 'created'
 
             data[course_number] = entry
