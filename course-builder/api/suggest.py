@@ -88,20 +88,30 @@ Now write the Teaching Notes for this course. Output ONLY the bullets, nothing e
 # ============================================================
 # Build a compact summary of slides for the prompt
 # ============================================================
-def build_slide_summary(slides, max_chars_per_slide=200):
+def build_slide_summary(slides, max_visible=200, max_notes=600):
     """
     Create a short summary of each slide for the AI prompt.
-    Limits content length so the prompt doesn't get huge.
+
+    Includes BOTH the visible slide text AND the instructor notes, because
+    on many decks the real teaching substance lives in the notes (not on the
+    slide). Length is capped per slide so the prompt does not get huge.
     """
     lines = []
     for i, slide in enumerate(slides, 1):
         visible = (slide.get('visible') or '').strip().replace('\n', ' ')
-        # Take just the first part of the visible content
-        if len(visible) > max_chars_per_slide:
-            visible = visible[:max_chars_per_slide] + '...'
+        if len(visible) > max_visible:
+            visible = visible[:max_visible] + '...'
         if not visible:
             visible = '(no visible text)'
-        lines.append(f"Slide {i}: {visible}")
+
+        notes = (slide.get('notes') or '').strip().replace('\n', ' ')
+        if len(notes) > max_notes:
+            notes = notes[:max_notes] + '...'
+
+        if notes:
+            lines.append(f"Slide {i}: {visible}\n    Instructor notes: {notes}")
+        else:
+            lines.append(f"Slide {i}: {visible}")
     return '\n'.join(lines)
 
 
@@ -130,7 +140,6 @@ def call_claude(prompt, api_key):
     with urllib.request.urlopen(req, timeout=30) as response:
         result = json.loads(response.read().decode('utf-8'))
 
-    # Pull the text out of the response
     for block in result.get('content', []):
         if block.get('type') == 'text':
             return block['text'].strip()
@@ -148,7 +157,6 @@ class handler(BaseHTTPRequestHandler):
             raw_body = self.rfile.read(content_length)
             payload = json.loads(raw_body.decode('utf-8'))
 
-            # Validate
             suggest_type = payload.get('type', '')
             if suggest_type not in ('section_map', 'teaching_notes'):
                 self._send_error(400, 'type must be "section_map" or "teaching_notes"')
@@ -167,7 +175,6 @@ class handler(BaseHTTPRequestHandler):
                 self._send_error(500, 'ANTHROPIC_API_KEY not configured on the server.')
                 return
 
-            # Build the prompt
             slide_summary = build_slide_summary(slides)
             template = SECTION_MAP_PROMPT if suggest_type == 'section_map' else TEACHING_NOTES_PROMPT
             prompt = template.format(
@@ -176,10 +183,8 @@ class handler(BaseHTTPRequestHandler):
                 slide_summary=slide_summary
             )
 
-            # Call Claude
             suggestion = call_claude(prompt, api_key)
 
-            # Send back the suggestion
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
