@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Publish a Course</title>
+
+<!-- JSZip reads the .pptx in the browser (a .pptx is just a zip of XML). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+  /* ---- Brandable look. A licensee can change these colors/logo/text. ---- */
+  :root {
+    --brand: #1f6feb;
+    --brand-dark: #1a5fd0;
+    --ink: #1c2128;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --ok: #1a7f37;
+    --bad: #b42318;
+    --bg: #f6f8fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 32px 20px 80px; }
+  header h1 { margin: 0 0 4px; font-size: 26px; }
+  header p { margin: 0 0 24px; color: var(--muted); }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .field { margin-bottom: 18px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  input[type="text"], input[type="url"], textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 8px; font-size: 15px; font-family: inherit;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  input[type="file"] { width: 100%; }
+  .hint { display: block; color: var(--muted); font-size: 13px; margin-top: 5px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .checkbox-row label { font-weight: 400; margin: 0; }
+  button {
+    background: var(--brand); color: #fff; border: none; border-radius: 8px;
+    padding: 12px 22px; font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: var(--brand-dark); }
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .status { margin-top: 18px; padding: 14px 16px; border-radius: 8px; background: #eef4ff; }
+  .error { margin-top: 18px; padding: 14px 16px; border-radius: 8px;
+           background: #fde9e7; color: var(--bad); border: 1px solid #f3c4bf; }
+  .success-box { border-left: 4px solid var(--ok); background: #eafaef; padding: 18px 20px;
+                 border-radius: 8px; margin-top: 8px; }
+  .success-box a { color: var(--brand-dark); font-weight: 600; word-break: break-all; }
+  ul.checklist { list-style: none; padding: 0; margin: 14px 0 0; }
+  ul.checklist li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  ul.checklist li:first-child { border-top: none; }
+  .tag { display: inline-block; min-width: 130px; color: var(--muted); }
+  .link-btn { background: none; color: var(--brand-dark); padding: 0; font-weight: 600;
+              text-decoration: underline; font-size: 15px; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Publish a Course</h1>
+    <p>Upload a PowerPoint and it goes live — no manual assembly.</p>
+  </header>
+
+  <div class="card" id="formCard">
+    <!-- Player base: always visible, prefilled from the saved default -->
+    <div class="field">
+      <label for="playerBase">Where will the course be played from?</label>
+      <input type="url" id="playerBase" placeholder="https://yourcompany.com/teacher/" />
+      <div class="checkbox-row">
+        <input type="checkbox" id="makeDefault" />
+        <label for="makeDefault">Make this the default</label>
+      </div>
+      <small class="hint">Example: https://ailearningalliance.org/teacher-we/</small>
+    </div>
+
+    <!-- PPTX -->
+    <div class="field">
+      <label for="pptx">PowerPoint file (.pptx)</label>
+      <input type="file" id="pptx" accept=".pptx" />
+      <small class="hint">The deck must include speaker notes — the teaching agent uses them.</small>
+    </div>
+
+    <!-- Title (prefilled from filename, editable) -->
+    <div class="field">
+      <label for="title">Course title</label>
+      <input type="text" id="title" placeholder="e.g., Practicing Difficult Conversations with AI" />
+      <small class="hint">This is the name learners and the agent will see.</small>
+    </div>
+
+    <!-- Section map (optional) -->
+    <div class="field">
+      <label for="sections">Section map <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <textarea id="sections" placeholder="One section per line, like:
+Opening and Welcome (slides 1-3)
+Core Skills (4-9)
+Wrap-Up (10-12)"></textarea>
+      <small class="hint">Leave blank for a single full-course section. Put the slide range in parentheses.</small>
+    </div>
+
+    <button id="publishBtn" onclick="publish()">Publish course</button>
+
+    <div id="status" class="status" style="display:none;"></div>
+    <div id="error" class="error" style="display:none;"></div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none; margin-top:20px;">
+    <div id="resultBody"></div>
+    <p style="margin-top:18px;">
+      <button class="link-btn" onclick="resetForm()">Publish another course</button>
+    </p>
+  </div>
+
+  <footer>Powered by the Course Builder engine.</footer>
+</div>
+
+<script>
+const DEFAULT_KEY = 'publish_player_base';
+
+// Prefill the saved default player base, if any.
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem(DEFAULT_KEY);
+  if (saved) document.getElementById('playerBase').value = saved;
+});
+
+// Prefill the title from the filename when a file is chosen.
+document.getElementById('pptx').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  const titleEl = document.getElementById('title');
+  if (f && !titleEl.value) {
+    let base = f.name.replace(/\.pptx$/i, '');
+    base = base.replace(/[-_]+/g, ' ').trim();
+    titleEl.value = base;
+  }
+});
+
+// ---------- PPTX reader (ported from the existing builder) ----------
+function decodeEntities(s) {
+  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'");
+}
+function extractTextFromXml(xml) {
+  const lines = [];
+  const paragraphs = xml.split(/<a:p[ >]/);
+  for (const para of paragraphs) {
+    const runs = [];
+    const regex = /<a:t[^>]*>([\s\S]*?)<\/a:t>/g;
+    let m;
+    while ((m = regex.exec(para)) !== null) runs.push(decodeEntities(m[1]));
+    if (runs.length) lines.push(runs.join(''));
+  }
+  return lines.join('\n').trim();
+}
+async function extractSlideData(file) {
+  const buf = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(buf);
+  const slideFiles = [];
+  zip.forEach((path, f) => {
+    const match = path.match(/^ppt\/slides\/slide(\d+)\.xml$/);
+    if (match) slideFiles.push({ num: parseInt(match[1], 10), file: f });
+  });
+  slideFiles.sort((a, b) => a.num - b.num);
+  const slides = [];
+  for (const sf of slideFiles) {
+    const slideXml = await sf.file.async('string');
+    const hidden = /<p:sld[^>]*show="0"/.test(slideXml);
+    const visible = extractTextFromXml(slideXml);
+    let notes = '';
+    const nf = zip.file(`ppt/notesSlides/notesSlide${sf.num}.xml`);
+    if (nf) notes = extractTextFromXml(await nf.async('string'));
+    slides.push({ visible, notes, hidden });
+  }
+  const visibleSlides = slides.filter(s => !s.hidden);
+  return { slides: visibleSlides, totalSlides: visibleSlides.length,
+           hiddenCount: slides.length - visibleSlides.length };
+}
+
+// ---------- UI helpers ----------
+function setStatus(msg) {
+  const el = document.getElementById('status');
+  el.textContent = msg; el.style.display = 'block';
+}
+function clearStatus() { document.getElementById('status').style.display = 'none'; }
+function showError(msg) {
+  const el = document.getElementById('error');
+  el.textContent = msg; el.style.display = 'block';
+}
+function clearError() { document.getElementById('error').style.display = 'none'; }
+
+// ---------- The publish flow ----------
+async function publish() {
+  clearError(); clearStatus();
+  const btn = document.getElementById('publishBtn');
+
+  const playerBase = document.getElementById('playerBase').value.trim();
+  const fileEl = document.getElementById('pptx');
+  const file = fileEl.files[0];
+  let title = document.getElementById('title').value.trim();
+  let sectionMap = document.getElementById('sections').value.trim();
+
+  // ---- Guards (run before anything is uploaded) ----
+  if (!playerBase) { showError('Please enter where the course will be played from.'); return; }
+  if (!/^https?:\/\//i.test(playerBase)) {
+    showError('The player address should start with https://'); return;
+  }
+  if (!file) { showError('Please choose a PowerPoint (.pptx) file.'); return; }
+  if (!/\.pptx$/i.test(file.name)) {
+    showError("That doesn't look like a PowerPoint file (.pptx). Please choose a .pptx deck."); return;
+  }
+  if (!title) { showError('Please enter a course title.'); return; }
+
+  btn.disabled = true;
+  try {
+    // Save the default if requested.
+    if (document.getElementById('makeDefault').checked) {
+      localStorage.setItem(DEFAULT_KEY, playerBase);
+    }
+
+    // Step 1: read the slides in the browser.
+    setStatus('Reading your slides…');
+    const slideData = await extractSlideData(file);
+
+    // Guard: the deck must have speaker notes.
+    const hasNotes = slideData.slides.some(s => s.notes && s.notes.trim());
+    if (!hasNotes) {
+      throw new Error('This deck has slides but no speaker notes. The teaching agent needs notes to work. Please add notes and re-upload.');
+    }
+    const total = slideData.totalSlides;
+
+    // If no section map given, default to one full-course section.
+    if (!sectionMap) sectionMap = `Full Course (slides 1-${total})`;
+
+    // Step 2: get a CloudConvert upload URL.
+    setStatus('Preparing upload…');
+    const jobResp = await fetch('/api/create_job', { method: 'POST' });
+    if (!jobResp.ok) throw new Error((await jobResp.text()) || 'Could not start the upload.');
+    const jobInfo = await jobResp.json();
+
+    // Step 3: upload the PPTX directly to CloudConvert.
+    setStatus('Uploading your PowerPoint…');
+    const cloudForm = new FormData();
+    Object.entries(jobInfo.upload_parameters).forEach(([k, v]) => cloudForm.append(k, v));
+    cloudForm.append('file', file);
+    const upResp = await fetch(jobInfo.upload_url, { method: 'POST', body: cloudForm });
+    if (!upResp.ok) throw new Error('Upload to CloudConvert failed.');
+
+    // Step 4: process (convert to PDF + build the notes text).
+    setStatus('Converting slides and building notes…');
+    const fields = {
+      course_number: '0',                 // auto-assigned at publish time
+      course_title: title,
+      course_type: '(not used in publish mode)',
+      audience: '(not used in publish mode)',
+      section_map: sectionMap,
+      teaching_notes: '(not used in publish mode)'
+    };
+    const procResp = await fetch('/api/process', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobInfo.job_id, slide_data: slideData, fields })
+    });
+    if (!procResp.ok) throw new Error((await procResp.text()) || 'Processing failed.');
+    const pkg = await procResp.json();
+
+    // Step 5: publish (PDF→repo, courses.json, agent KB + menu, live link).
+    setStatus('Publishing the course…');
+    const pubResp = await fetch('/api/publish_course', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_id: pkg.job_id,
+        pdf_filename: pkg.pdf_filename,
+        txt_filename: pkg.txt_filename,
+        txt_content: pkg.txt_content,
+        course_title: title,
+        section_map: sectionMap,
+        total_slides: total,
+        player_base: playerBase
+      })
+    });
+    const result = await pubResp.json();
+
+    clearStatus();
+    showResult(result);
+  } catch (err) {
+    clearStatus();
+    showError(err.message || String(err));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showResult(result) {
+  const card = document.getElementById('resultCard');
+  const body = document.getElementById('resultBody');
+  document.getElementById('formCard').style.display = 'none';
+
+  let html = '';
+  if (result.ok && result.test_link) {
+    html += `<div class="success-box">
+      <strong>✅ Course is live (course #${result.course_number}).</strong><br/>
+      Test it here:<br/>
+      <a href="${result.test_link}" target="_blank" rel="noopener">${result.test_link}</a>
+    </div>`;
+  } else {
+    html += `<div class="error" style="margin-top:0;">
+      <strong>⚠️ ${result.summary || 'Something went wrong.'}</strong>
+    </div>`;
+  }
+
+  if (Array.isArray(result.checklist)) {
+    html += '<ul class="checklist">';
+    for (const s of result.checklist) {
+      html += `<li><span class="tag">${s.step}</span> ${s.status}${s.detail ? ' — ' + s.detail : ''}</li>`;
+    }
+    html += '</ul>';
+  }
+
+  body.innerHTML = html;
+  card.style.display = 'block';
+}
+
+function resetForm() {
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('formCard').style.display = 'block';
+  document.getElementById('pptx').value = '';
+  document.getElementById('title').value = '';
+  document.getElementById('sections').value = '';
+  clearError(); clearStatus();
+}
+</script>
+</body>
+</html>
