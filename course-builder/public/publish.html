@@ -6,6 +6,13 @@
 <title>Publish a Course</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 
 <style>
   :root {
@@ -21,6 +28,9 @@
   header p { margin: 0 0 24px; color: var(--muted); }
   .card { background: #fff; border: 1px solid var(--line); border-radius: 12px;
     padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .group { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 18px; background:#fcfcfd; }
+  .group-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .group-sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
   .field { margin-bottom: 18px; }
   label { display: block; font-weight: 600; margin-bottom: 6px; }
   input[type="text"], input[type="url"], textarea {
@@ -58,7 +68,7 @@
 <div class="wrap">
   <header>
     <h1>Publish a Course</h1>
-    <p>Upload a PowerPoint and it goes live — no manual assembly.</p>
+    <p>Upload a PowerPoint (or a PDF + notes) and it goes live — no manual assembly.</p>
   </header>
 
   <div class="card" id="formCard">
@@ -73,18 +83,28 @@
       <small class="hint">Example: https://ailearningalliance.org/teacher-we/</small>
     </div>
 
-    <!-- PPTX -->
-    <div class="field">
-      <label for="pptx">PowerPoint file (.pptx)</label>
-      <input type="file" id="pptx" accept=".pptx" />
-      <small class="hint">Maximum size: 100 MB. The course needs speaker notes — either inside this deck, or in the notes file below.</small>
-    </div>
+    <!-- Course material group -->
+    <div class="group">
+      <div class="group-title">Course material</div>
+      <div class="group-sub">Provide a PowerPoint, OR a PDF together with a notes file. (PDF wins for the visuals; the notes file is what the agent teaches from.)</div>
 
-    <!-- Separate notes file -->
-    <div class="field">
-      <label for="notesFile">Instructor notes by slide (.txt) <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-      <input type="file" id="notesFile" accept=".txt" />
-      <small class="hint">Use this if your deck has no speaker notes. Format: a "Slide 1:" header before each slide's notes (the extractpptnotes.com format). The number of slides and notes must match exactly.</small>
+      <div class="field">
+        <label for="pptx">PowerPoint file (.pptx)</label>
+        <input type="file" id="pptx" accept=".pptx" />
+        <small class="hint">Max 100 MB. Uses the deck's own speaker notes, or the notes file below.</small>
+      </div>
+
+      <div class="field">
+        <label for="pdfFile">PDF file (.pdf) <span style="font-weight:400;color:var(--muted)">(instead of a PowerPoint)</span></label>
+        <input type="file" id="pdfFile" accept=".pdf" />
+        <small class="hint">Max 100 MB. A PDF has no speaker notes, so a notes file below is required.</small>
+      </div>
+
+      <div class="field" style="margin-bottom:0;">
+        <label for="notesFile">Instructor notes by slide (.txt)</label>
+        <input type="file" id="notesFile" accept=".txt" />
+        <small class="hint">Required with a PDF; optional with a PowerPoint that already has notes. Format: a "Slide 1:" header before each slide's notes. The number of slides/pages and notes must match exactly.</small>
+      </div>
     </div>
 
     <!-- Title -->
@@ -149,20 +169,25 @@ Do not vary from the approved documents in the library."></textarea>
 
 <script>
 const DEFAULT_KEY = 'publish_player_base';
-const MAX_PPTX_MB = 100;
+const MAX_MB = 100;
 
 window.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem(DEFAULT_KEY);
   if (saved) document.getElementById('playerBase').value = saved;
 });
 
-document.getElementById('pptx').addEventListener('change', (e) => {
-  const f = e.target.files[0];
+function prefillTitle(name, stripExt) {
   const titleEl = document.getElementById('title');
-  if (f && !titleEl.value) {
-    let base = f.name.replace(/\.pptx$/i, '').replace(/[-_]+/g, ' ').trim();
+  if (!titleEl.value) {
+    let base = name.replace(stripExt, '').replace(/[-_]+/g, ' ').trim();
     titleEl.value = base;
   }
+}
+document.getElementById('pptx').addEventListener('change', (e) => {
+  const f = e.target.files[0]; if (f) prefillTitle(f.name, /\.pptx$/i);
+});
+document.getElementById('pdfFile').addEventListener('change', (e) => {
+  const f = e.target.files[0]; if (f) prefillTitle(f.name, /\.pdf$/i);
 });
 
 // ---------- PPTX reader ----------
@@ -206,6 +231,14 @@ async function extractSlideData(file) {
            hiddenCount: slides.length - visibleSlides.length };
 }
 
+// ---------- PDF page count (best effort) ----------
+async function getPdfPageCount(file) {
+  if (!window.pdfjsLib) return null;
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  return pdf.numPages;
+}
+
 // ---------- Separate-notes parser + merge ----------
 function parseNotesFile(text) {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -223,11 +256,10 @@ function parseNotesFile(text) {
 }
 function mergeNotes(slideData, notesArray) {
   const slideCount = slideData.slides.length;
-  const notesCount = notesArray.length;
-  if (slideCount !== notesCount) {
+  if (slideCount !== notesArray.length) {
     throw new Error(
       `Slide count mismatch: the PowerPoint has ${slideCount} slides, but the ` +
-      `notes file has ${notesCount}. These must match exactly. If your deck had ` +
+      `notes file has ${notesArray.length}. These must match exactly. If your deck had ` +
       `hidden slides, remove them before extracting notes, then try again.`);
   }
   const merged = slideData.slides.map((s, i) => ({ visible: s.visible, notes: notesArray[i], hidden: s.hidden }));
@@ -242,19 +274,42 @@ function readFileText(file) {
   });
 }
 
-// Build slide data from the chosen PPTX, merging the notes file if present.
-async function getSlideDataWithNotes() {
-  const file = document.getElementById('pptx').files[0];
-  if (!file) throw new Error('Please choose your PowerPoint (.pptx) first, then generate.');
-  if (!/\.pptx$/i.test(file.name)) throw new Error('Please choose a .pptx file first.');
-  let slideData = await extractSlideData(file);
-  const notesFile = document.getElementById('notesFile').files[0];
-  if (notesFile) {
-    const notesText = await readFileText(notesFile);
-    const notesArray = parseNotesFile(notesText);
-    if (notesArray.length) slideData = mergeNotes(slideData, notesArray);
+// ---------- Which inputs are present + build slide data ----------
+function chosenInputs() {
+  return {
+    pptx: document.getElementById('pptx').files[0] || null,
+    pdf: document.getElementById('pdfFile').files[0] || null,
+    notes: document.getElementById('notesFile').files[0] || null
+  };
+}
+// Returns { slideData, usingPdf, visualFile }
+async function buildSlideData() {
+  const { pptx, pdf, notes } = chosenInputs();
+
+  if (pdf) {
+    // PDF path — notes file required.
+    if (!notes) throw new Error('Slide notes are required if you only upload a PDF.');
+    const notesArray = parseNotesFile(await readFileText(notes));
+    if (!notesArray.length) throw new Error('I couldn\'t find any "Slide N:" sections in that notes file. Please check the format.');
+    let pageCount = null;
+    try { pageCount = await getPdfPageCount(pdf); } catch (e) { pageCount = null; }
+    if (pageCount !== null && pageCount !== notesArray.length) {
+      throw new Error(`Page/notes mismatch: the PDF has ${pageCount} pages, but the notes file has ${notesArray.length}. These must match exactly.`);
+    }
+    const slides = notesArray.map(n => ({ visible: '', notes: n, hidden: false }));
+    return { slideData: { slides, totalSlides: slides.length, hiddenCount: 0 }, usingPdf: true, visualFile: pdf };
   }
-  return slideData;
+
+  if (pptx) {
+    let slideData = await extractSlideData(pptx);
+    if (notes) {
+      const notesArray = parseNotesFile(await readFileText(notes));
+      if (notesArray.length) slideData = mergeNotes(slideData, notesArray);
+    }
+    return { slideData, usingPdf: false, visualFile: pptx };
+  }
+
+  throw new Error('Please choose a PowerPoint (.pptx) or a PDF (.pdf) file.');
 }
 
 // ---------- UI helpers ----------
@@ -279,13 +334,12 @@ async function generate(type) {
   const note = document.getElementById(isSection ? 'genSectionsNote' : 'genTeachingNote');
   const box = document.getElementById(isSection ? 'sections' : 'teaching');
   const title = document.getElementById('title').value.trim();
-  clearError();
-  note.textContent = '';
+  clearError(); note.textContent = '';
   btn.disabled = true;
   const original = btn.textContent;
   btn.textContent = 'Reading slides…';
   try {
-    const slideData = await getSlideDataWithNotes();
+    const { slideData } = await buildSlideData();
     btn.textContent = 'Generating…';
     const text = await callSuggest(type, slideData, title);
     if (!text) throw new Error('The generator came back empty. You can type it in, or try again.');
@@ -300,15 +354,14 @@ async function generate(type) {
   }
 }
 
-// ---------- The publish flow ----------
+// ---------- Publish ----------
 async function publish() {
   clearError(); clearStatus();
   const btn = document.getElementById('publishBtn');
   const btnLabel = btn.textContent;
 
   const playerBase = document.getElementById('playerBase').value.trim();
-  const file = document.getElementById('pptx').files[0];
-  const notesFile = document.getElementById('notesFile').files[0];
+  const { pptx, pdf, notes } = chosenInputs();
   const title = document.getElementById('title').value.trim();
   const courseType = document.getElementById('courseType').value.trim();
   const audience = document.getElementById('audience').value.trim();
@@ -316,13 +369,16 @@ async function publish() {
   // ---- Guards (before any upload) ----
   if (!playerBase) { showError('Please enter where the course will be played from.'); return; }
   if (!/^https?:\/\//i.test(playerBase)) { showError('The player address should start with https://'); return; }
-  if (!file) { showError('Please choose a PowerPoint (.pptx) file.'); return; }
-  if (!/\.pptx$/i.test(file.name)) { showError("That doesn't look like a PowerPoint file (.pptx). Please choose a .pptx deck."); return; }
-  if (file.size > MAX_PPTX_MB * 1024 * 1024) {
-    const mb = (file.size / (1024 * 1024)).toFixed(0);
-    showError(`That deck is ${mb} MB, over the ${MAX_PPTX_MB} MB limit. Please compress it (or remove hidden/unused slides) and try again.`); return;
+  if (!pptx && !pdf) { showError('Please choose a PowerPoint (.pptx) or a PDF (.pdf) file.'); return; }
+  if (pptx && !/\.pptx$/i.test(pptx.name)) { showError('That PowerPoint should be a .pptx file.'); return; }
+  if (pdf && !/\.pdf$/i.test(pdf.name)) { showError('That PDF should be a .pdf file.'); return; }
+  if (pdf && !notes) { showError('Slide notes are required if you only upload a PDF.'); return; }
+  if (notes && !/\.txt$/i.test(notes.name)) { showError('The notes file should be a .txt file.'); return; }
+  const visual = pdf || pptx;
+  if (visual.size > MAX_MB * 1024 * 1024) {
+    const mb = (visual.size / (1024 * 1024)).toFixed(0);
+    showError(`That file is ${mb} MB, over the ${MAX_MB} MB limit. Please compress it and try again.`); return;
   }
-  if (notesFile && !/\.txt$/i.test(notesFile.name)) { showError('The notes file should be a .txt file.'); return; }
   if (!title) { showError('Please enter a course title.'); return; }
 
   btn.disabled = true;
@@ -335,16 +391,10 @@ async function publish() {
       localStorage.setItem(DEFAULT_KEY, playerBase);
     }
 
-    // Read slides (+ merge notes file).
-    let slideData = await extractSlideData(file);
-    if (notesFile) {
-      setStatus('Reading your notes file…');
-      const notesArray = parseNotesFile(await readFileText(notesFile));
-      if (!notesArray.length) throw new Error('I couldn\'t find any "Slide N:" sections in that notes file. Please check the format.');
-      slideData = mergeNotes(slideData, notesArray);
-    }
+    // Build slide data (PPTX or PDF+notes), with all the matching checks.
+    const { slideData, usingPdf, visualFile } = await buildSlideData();
     const hasNotes = slideData.slides.some(s => s.notes && s.notes.trim());
-    if (!hasNotes) throw new Error('This deck has no speaker notes, and no notes file was provided. The teaching agent needs notes. Add notes to the deck, or upload a notes (.txt) file.');
+    if (!hasNotes) throw new Error('There are no instructor notes. The teaching agent needs notes. Add notes to the deck, or upload a notes (.txt) file.');
     const total = slideData.totalSlides;
 
     // Auto-fill any blank boxes (never empty at publish).
@@ -362,22 +412,25 @@ async function publish() {
       if (teaching) document.getElementById('teaching').value = teaching;
     }
 
-    // CloudConvert upload URL.
+    // CloudConvert upload URL (kind tells it whether to convert or pass through).
     setStatus('Preparing upload…');
-    const jobResp = await fetch('/api/create_job', { method: 'POST' });
+    const jobResp = await fetch('/api/create_job', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: usingPdf ? 'pdf' : 'pptx' })
+    });
     if (!jobResp.ok) throw new Error((await jobResp.text()) || 'Could not start the upload.');
     const jobInfo = await jobResp.json();
 
-    // Upload PPTX to CloudConvert.
-    setStatus('Uploading your PowerPoint…');
+    // Upload the visual file (PDF or PPTX) to CloudConvert.
+    setStatus(usingPdf ? 'Uploading your PDF…' : 'Uploading your PowerPoint…');
     const cloudForm = new FormData();
     Object.entries(jobInfo.upload_parameters).forEach(([k, v]) => cloudForm.append(k, v));
-    cloudForm.append('file', file);
+    cloudForm.append('file', visualFile);
     const upResp = await fetch(jobInfo.upload_url, { method: 'POST', body: cloudForm });
     if (!upResp.ok) throw new Error('Upload to CloudConvert failed.');
 
-    // Process (convert + build notes text).
-    setStatus('Converting slides and building notes…');
+    // Process (build the notes text; for PDF this just waits for the passthrough).
+    setStatus('Building notes and preparing files…');
     const fields = {
       course_number: '0',
       course_title: title,
@@ -428,7 +481,6 @@ function showResult(result) {
   const card = document.getElementById('resultCard');
   const body = document.getElementById('resultBody');
   document.getElementById('formCard').style.display = 'none';
-
   let html = '';
   if (result.ok && result.test_link) {
     html += `<div class="success-box">
@@ -437,9 +489,7 @@ function showResult(result) {
       <a href="${result.test_link}" target="_blank" rel="noopener">${result.test_link}</a>
     </div>`;
   } else {
-    html += `<div class="error" style="margin-top:0;">
-      <strong>⚠️ ${result.summary || 'Something went wrong.'}</strong>
-    </div>`;
+    html += `<div class="error" style="margin-top:0;"><strong>⚠️ ${result.summary || 'Something went wrong.'}</strong></div>`;
   }
   if (Array.isArray(result.checklist)) {
     html += '<ul class="checklist">';
@@ -456,13 +506,9 @@ function showResult(result) {
 function resetForm() {
   document.getElementById('resultCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
-  document.getElementById('pptx').value = '';
-  document.getElementById('notesFile').value = '';
-  document.getElementById('title').value = '';
-  document.getElementById('courseType').value = '';
-  document.getElementById('audience').value = '';
-  document.getElementById('sections').value = '';
-  document.getElementById('teaching').value = '';
+  ['pptx','pdfFile','notesFile','title','courseType','audience','sections','teaching'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
   document.getElementById('genSectionsNote').textContent = '';
   document.getElementById('genTeachingNote').textContent = '';
   clearError(); clearStatus();
