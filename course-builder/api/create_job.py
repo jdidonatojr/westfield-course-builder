@@ -2,13 +2,15 @@
 AILA Course Builder — Step 1 of 2-step upload flow
 
 Creates a CloudConvert job and returns the direct-upload URL to the browser.
-The browser will upload the .pptx directly to CloudConvert (bypassing Vercel's
+The browser uploads the file directly to CloudConvert (bypassing Vercel's
 4.5 MB function payload limit).
 
 POST /api/create_job
-  body: {} (no body needed)
+  body (optional): { "kind": "pptx" | "pdf" }
+    - "pptx" (default): upload -> convert to PDF -> export URL
+    - "pdf": upload -> export URL  (passthrough; no conversion)
 
-Returns: JSON with job_id and upload form details
+Returns: JSON with job_id and the upload form details
 """
 
 import os
@@ -26,40 +28,48 @@ class handler(BaseHTTPRequestHandler):
                 self._send_error(500, 'CloudConvert API key not configured.')
                 return
 
-            # Build the job: upload → convert → export-url
-            job_payload = {
-                'tasks': {
-                    'upload-task': {
-                        'operation': 'import/upload'
-                    },
-                    'convert-task': {
-                        'operation': 'convert',
-                        'input': 'upload-task',
-                        'input_format': 'pptx',
-                        'output_format': 'pdf'
-                    },
-                    'export-task': {
-                        'operation': 'export/url',
-                        'input': 'convert-task'
+            # Read the optional body to learn which kind of input we're handling.
+            kind = 'pptx'
+            try:
+                length = int(self.headers.get('Content-Length', 0))
+                if length:
+                    body = json.loads(self.rfile.read(length).decode('utf-8'))
+                    kind = str(body.get('kind', 'pptx')).strip().lower() or 'pptx'
+            except Exception:
+                kind = 'pptx'
+
+            if kind == 'pdf':
+                # Passthrough: just hold the uploaded PDF and hand back a URL.
+                job_payload = {
+                    'tasks': {
+                        'upload-task': {'operation': 'import/upload'},
+                        'export-task': {'operation': 'export/url', 'input': 'upload-task'}
                     }
                 }
-            }
+            else:
+                # Default: convert the uploaded PPTX to PDF.
+                job_payload = {
+                    'tasks': {
+                        'upload-task': {'operation': 'import/upload'},
+                        'convert-task': {
+                            'operation': 'convert',
+                            'input': 'upload-task',
+                            'input_format': 'pptx',
+                            'output_format': 'pdf'
+                        },
+                        'export-task': {'operation': 'export/url', 'input': 'convert-task'}
+                    }
+                }
 
-            # POST to CloudConvert to create the job
             req = urllib.request.Request(
                 'https://api.cloudconvert.com/v2/jobs',
                 data=json.dumps(job_payload).encode('utf-8'),
-                headers={
-                    'Authorization': f'Bearer {api_key}',
-                    'Content-Type': 'application/json'
-                },
+                headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
                 method='POST'
             )
-
             with urllib.request.urlopen(req, timeout=30) as response:
                 job_data = json.loads(response.read().decode('utf-8'))['data']
 
-            # Find the upload task and pull out its form URL/parameters
             upload_task = None
             for task in job_data['tasks']:
                 if task['name'] == 'upload-task':
@@ -70,7 +80,6 @@ class handler(BaseHTTPRequestHandler):
                 self._send_error(500, 'CloudConvert did not return upload form.')
                 return
 
-            # Send back what the browser needs to upload directly
             response_payload = {
                 'job_id': job_data['id'],
                 'upload_url': upload_task['result']['form']['url'],
@@ -84,10 +93,7 @@ class handler(BaseHTTPRequestHandler):
 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8', errors='replace')
-            self._send_error(
-                500,
-                f'CloudConvert error ({e.code}): {error_body[:300]}'
-            )
+            self._send_error(500, f'CloudConvert error ({e.code}): {error_body[:300]}')
         except Exception as e:
             self._send_error(500, f'Server error: {str(e)}')
 
