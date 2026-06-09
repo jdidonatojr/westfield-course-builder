@@ -55,6 +55,17 @@
   .success-box { border-left: 4px solid var(--ok); background: #eafaef; padding: 18px 20px;
     border-radius: 8px; margin-top: 8px; }
   .success-box a { color: var(--brand-dark); font-weight: 600; word-break: break-all; }
+  .embed-box { border-left: 4px solid var(--brand); background: #eef4ff; padding: 16px 20px;
+    border-radius: 8px; margin-top: 16px; }
+  .embed-box .embed-title { font-weight: 700; margin-bottom: 4px; }
+  .embed-box .embed-sub { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .embed-textarea { width: 100%; min-height: 120px; font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12.5px; border: 1px solid #cfe0ff; border-radius: 8px; padding: 10px 12px;
+    background: #fff; resize: vertical; color: #1c2128; }
+  .copy-btn { background: var(--brand); color: #fff; border: none; border-radius: 7px; padding: 8px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+  .copy-btn:hover { background: var(--brand-dark); }
+  .copy-ok { color: var(--ok); font-size: 13px; font-weight: 600; margin-left: 10px; }
   ul.checklist { list-style: none; padding: 0; margin: 14px 0 0; }
   ul.checklist li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
   ul.checklist li:first-child { border-top: none; }
@@ -498,9 +509,46 @@ function showResult(result) {
     }
     html += '</ul>';
   }
+
+  // Embed code box (only when the course actually published).
+  let embed = '';
+  if (result.ok && result.test_link) {
+    embed =
+      '<iframe\n' +
+      '  src="' + result.test_link + '"\n' +
+      '  width="100%" height="800" style="border:0;border-radius:12px;"\n' +
+      '  allow="microphone; autoplay; fullscreen"\n' +
+      '  title="Course Player"></iframe>';
+    html += `<div class="embed-box">
+      <div class="embed-title">Give this to your webmaster once:</div>
+      <div class="embed-sub">This embed shows the course on any page of your website.</div>
+      <textarea id="embedCode" class="embed-textarea" readonly></textarea>
+      <div><button class="copy-btn" onclick="copyEmbed()">Copy embed code</button><span id="embedCopied" class="copy-ok"></span></div>
+    </div>`;
+  }
+
   body.innerHTML = html;
+  const ec = document.getElementById('embedCode');
+  if (ec) ec.value = embed;   // set as a value so the HTML tags display literally
   card.style.display = 'block';
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function copyEmbed() {
+  const ec = document.getElementById('embedCode');
+  if (!ec) return;
+  ec.focus(); ec.select(); ec.setSelectionRange(0, 99999);
+  const done = function () {
+    const m = document.getElementById('embedCopied');
+    if (m) { m.textContent = 'Copied!'; setTimeout(function () { m.textContent = ''; }, 2000); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ec.value).then(done).catch(function () {
+      try { document.execCommand('copy'); done(); } catch (e) {}
+    });
+  } else {
+    try { document.execCommand('copy'); done(); } catch (e) {}
+  }
 }
 
 function resetForm() {
