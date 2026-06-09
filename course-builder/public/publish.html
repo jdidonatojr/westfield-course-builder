@@ -5,63 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Publish a Course</title>
 
-<!-- JSZip reads the .pptx in the browser (a .pptx is just a zip of XML). -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <style>
-  /* ---- Brandable look. A licensee can change these colors/logo/text. ---- */
   :root {
-    --brand: #1f6feb;
-    --brand-dark: #1a5fd0;
-    --ink: #1c2128;
-    --muted: #6b7280;
-    --line: #e5e7eb;
-    --ok: #1a7f37;
-    --bad: #b42318;
-    --bg: #f6f8fa;
+    --brand: #1f6feb; --brand-dark: #1a5fd0; --ink: #1c2128; --muted: #6b7280;
+    --line: #e5e7eb; --ok: #1a7f37; --bad: #b42318; --bg: #f6f8fa;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
+  body { margin: 0; background: var(--bg); color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
-  }
+    line-height: 1.5; }
   .wrap { max-width: 680px; margin: 0 auto; padding: 32px 20px 80px; }
   header h1 { margin: 0 0 4px; font-size: 26px; }
   header p { margin: 0 0 24px; color: var(--muted); }
-  .card {
-    background: #fff; border: 1px solid var(--line); border-radius: 12px;
-    padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
   .field { margin-bottom: 18px; }
   label { display: block; font-weight: 600; margin-bottom: 6px; }
   input[type="text"], input[type="url"], textarea {
     width: 100%; padding: 10px 12px; border: 1px solid var(--line);
-    border-radius: 8px; font-size: 15px; font-family: inherit;
-  }
+    border-radius: 8px; font-size: 15px; font-family: inherit; }
   textarea { min-height: 120px; resize: vertical; }
   input[type="file"] { width: 100%; }
   .hint { display: block; color: var(--muted); font-size: 13px; margin-top: 5px; }
   .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .checkbox-row label { font-weight: 400; margin: 0; }
-  button {
-    background: var(--brand); color: #fff; border: none; border-radius: 8px;
-    padding: 12px 22px; font-size: 16px; font-weight: 600; cursor: pointer;
-  }
+  button { background: var(--brand); color: #fff; border: none; border-radius: 8px;
+    padding: 12px 22px; font-size: 16px; font-weight: 600; cursor: pointer; }
   button:hover { background: var(--brand-dark); }
   button:disabled { opacity: 0.55; cursor: not-allowed; }
   .status { margin-top: 18px; padding: 14px 16px; border-radius: 8px; background: #eef4ff; }
   .error { margin-top: 18px; padding: 14px 16px; border-radius: 8px;
-           background: #fde9e7; color: var(--bad); border: 1px solid #f3c4bf; }
+    background: #fde9e7; color: var(--bad); border: 1px solid #f3c4bf; }
   .success-box { border-left: 4px solid var(--ok); background: #eafaef; padding: 18px 20px;
-                 border-radius: 8px; margin-top: 8px; }
+    border-radius: 8px; margin-top: 8px; }
   .success-box a { color: var(--brand-dark); font-weight: 600; word-break: break-all; }
   ul.checklist { list-style: none; padding: 0; margin: 14px 0 0; }
   ul.checklist li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
   ul.checklist li:first-child { border-top: none; }
   .tag { display: inline-block; min-width: 130px; color: var(--muted); }
   .link-btn { background: none; color: var(--brand-dark); padding: 0; font-weight: 600;
-              text-decoration: underline; font-size: 15px; }
+    text-decoration: underline; font-size: 15px; }
   footer { color: var(--muted); font-size: 13px; margin-top: 28px; text-align: center; }
 </style>
 </head>
@@ -73,7 +58,7 @@
   </header>
 
   <div class="card" id="formCard">
-    <!-- Player base: always visible, prefilled from the saved default -->
+    <!-- Player base -->
     <div class="field">
       <label for="playerBase">Where will the course be played from?</label>
       <input type="url" id="playerBase" placeholder="https://yourcompany.com/teacher/" />
@@ -88,10 +73,17 @@
     <div class="field">
       <label for="pptx">PowerPoint file (.pptx)</label>
       <input type="file" id="pptx" accept=".pptx" />
-      <small class="hint">The deck must include speaker notes — the teaching agent uses them.</small>
+      <small class="hint">Maximum size: 100 MB. The course needs speaker notes — either inside this deck, or in the notes file below.</small>
     </div>
 
-    <!-- Title (prefilled from filename, editable) -->
+    <!-- Separate notes file (optional) -->
+    <div class="field">
+      <label for="notesFile">Instructor notes by slide (.txt) <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <input type="file" id="notesFile" accept=".txt" />
+      <small class="hint">Use this if your deck has no speaker notes. Format: a "Slide 1:" header before each slide's notes (the extractpptnotes.com format). The number of slides and notes must match exactly.</small>
+    </div>
+
+    <!-- Title -->
     <div class="field">
       <label for="title">Course title</label>
       <input type="text" id="title" placeholder="e.g., Practicing Difficult Conversations with AI" />
@@ -126,20 +118,18 @@ Wrap-Up (10-12)"></textarea>
 
 <script>
 const DEFAULT_KEY = 'publish_player_base';
+const MAX_PPTX_MB = 100;
 
-// Prefill the saved default player base, if any.
 window.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem(DEFAULT_KEY);
   if (saved) document.getElementById('playerBase').value = saved;
 });
 
-// Prefill the title from the filename when a file is chosen.
 document.getElementById('pptx').addEventListener('change', (e) => {
   const f = e.target.files[0];
   const titleEl = document.getElementById('title');
   if (f && !titleEl.value) {
-    let base = f.name.replace(/\.pptx$/i, '');
-    base = base.replace(/[-_]+/g, ' ').trim();
+    let base = f.name.replace(/\.pptx$/i, '').replace(/[-_]+/g, ' ').trim();
     titleEl.value = base;
   }
 });
@@ -185,16 +175,46 @@ async function extractSlideData(file) {
            hiddenCount: slides.length - visibleSlides.length };
 }
 
+// ---------- Separate-notes parser + merge (ported from V2) ----------
+function parseNotesFile(text) {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const parts = normalized.split(/^Slide\s+(\d+):\s*$/m);
+  const notesBySlide = {};
+  for (let i = 1; i < parts.length; i += 2) {
+    const slideNum = parseInt(parts[i], 10);
+    let block = parts[i + 1] || '';
+    block = block.replace(/^\s*-{3,}\s*\n?/, '').trim();
+    if (/^-*$/.test(block)) block = '';
+    notesBySlide[slideNum] = block;
+  }
+  const nums = Object.keys(notesBySlide).map(n => parseInt(n, 10)).sort((a, b) => a - b);
+  return nums.map(n => notesBySlide[n]);
+}
+function mergeNotes(slideData, notesArray) {
+  const slideCount = slideData.slides.length;
+  const notesCount = notesArray.length;
+  if (slideCount !== notesCount) {
+    throw new Error(
+      `Slide count mismatch: the PowerPoint has ${slideCount} slides, but the ` +
+      `notes file has ${notesCount}. These must match exactly. If your deck had ` +
+      `hidden slides, remove them before extracting notes, then try again.`);
+  }
+  const merged = slideData.slides.map((s, i) => ({ visible: s.visible, notes: notesArray[i], hidden: s.hidden }));
+  return { slides: merged, totalSlides: slideData.totalSlides, hiddenCount: slideData.hiddenCount };
+}
+function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Could not read the notes file.'));
+    r.readAsText(file);
+  });
+}
+
 // ---------- UI helpers ----------
-function setStatus(msg) {
-  const el = document.getElementById('status');
-  el.textContent = msg; el.style.display = 'block';
-}
+function setStatus(msg) { const el = document.getElementById('status'); el.textContent = msg; el.style.display = 'block'; }
 function clearStatus() { document.getElementById('status').style.display = 'none'; }
-function showError(msg) {
-  const el = document.getElementById('error');
-  el.textContent = msg; el.style.display = 'block';
-}
+function showError(msg) { const el = document.getElementById('error'); el.textContent = msg; el.style.display = 'block'; }
 function clearError() { document.getElementById('error').style.display = 'none'; }
 
 // ---------- The publish flow ----------
@@ -203,50 +223,59 @@ async function publish() {
   const btn = document.getElementById('publishBtn');
 
   const playerBase = document.getElementById('playerBase').value.trim();
-  const fileEl = document.getElementById('pptx');
-  const file = fileEl.files[0];
+  const file = document.getElementById('pptx').files[0];
+  const notesFile = document.getElementById('notesFile').files[0];
   let title = document.getElementById('title').value.trim();
   let sectionMap = document.getElementById('sections').value.trim();
 
-  // ---- Guards (run before anything is uploaded) ----
+  // ---- Guards (before any upload) ----
   if (!playerBase) { showError('Please enter where the course will be played from.'); return; }
-  if (!/^https?:\/\//i.test(playerBase)) {
-    showError('The player address should start with https://'); return;
-  }
+  if (!/^https?:\/\//i.test(playerBase)) { showError('The player address should start with https://'); return; }
   if (!file) { showError('Please choose a PowerPoint (.pptx) file.'); return; }
-  if (!/\.pptx$/i.test(file.name)) {
-    showError("That doesn't look like a PowerPoint file (.pptx). Please choose a .pptx deck."); return;
+  if (!/\.pptx$/i.test(file.name)) { showError("That doesn't look like a PowerPoint file (.pptx). Please choose a .pptx deck."); return; }
+  if (file.size > MAX_PPTX_MB * 1024 * 1024) {
+    const mb = (file.size / (1024 * 1024)).toFixed(0);
+    showError(`That deck is ${mb} MB, over the ${MAX_PPTX_MB} MB limit. Please compress it (or remove hidden/unused slides) and try again.`); return;
   }
+  if (notesFile && !/\.txt$/i.test(notesFile.name)) { showError('The notes file should be a .txt file.'); return; }
   if (!title) { showError('Please enter a course title.'); return; }
 
   btn.disabled = true;
   try {
-    // Save the default if requested.
     if (document.getElementById('makeDefault').checked) {
       localStorage.setItem(DEFAULT_KEY, playerBase);
     }
 
-    // Step 1: read the slides in the browser.
+    // Step 1: read the slides.
     setStatus('Reading your slides…');
-    const slideData = await extractSlideData(file);
+    let slideData = await extractSlideData(file);
 
-    // Guard: the deck must have speaker notes.
+    // Step 2: figure out the notes (notes file wins; else the deck's own notes).
+    if (notesFile) {
+      setStatus('Reading your notes file…');
+      const notesText = await readFileText(notesFile);
+      const notesArray = parseNotesFile(notesText);
+      if (!notesArray.length) {
+        throw new Error('I couldn\'t find any "Slide N:" sections in that notes file. Please check the format.');
+      }
+      slideData = mergeNotes(slideData, notesArray);  // throws a clear message if counts differ
+    }
+
+    // Guard: there must be notes from somewhere.
     const hasNotes = slideData.slides.some(s => s.notes && s.notes.trim());
     if (!hasNotes) {
-      throw new Error('This deck has slides but no speaker notes. The teaching agent needs notes to work. Please add notes and re-upload.');
+      throw new Error('This deck has no speaker notes, and no notes file was provided. The teaching agent needs notes. Add notes to the deck, or upload a notes (.txt) file.');
     }
     const total = slideData.totalSlides;
-
-    // If no section map given, default to one full-course section.
     if (!sectionMap) sectionMap = `Full Course (slides 1-${total})`;
 
-    // Step 2: get a CloudConvert upload URL.
+    // Step 3: CloudConvert upload URL.
     setStatus('Preparing upload…');
     const jobResp = await fetch('/api/create_job', { method: 'POST' });
     if (!jobResp.ok) throw new Error((await jobResp.text()) || 'Could not start the upload.');
     const jobInfo = await jobResp.json();
 
-    // Step 3: upload the PPTX directly to CloudConvert.
+    // Step 4: upload PPTX to CloudConvert.
     setStatus('Uploading your PowerPoint…');
     const cloudForm = new FormData();
     Object.entries(jobInfo.upload_parameters).forEach(([k, v]) => cloudForm.append(k, v));
@@ -254,10 +283,10 @@ async function publish() {
     const upResp = await fetch(jobInfo.upload_url, { method: 'POST', body: cloudForm });
     if (!upResp.ok) throw new Error('Upload to CloudConvert failed.');
 
-    // Step 4: process (convert to PDF + build the notes text).
+    // Step 5: process (convert + build notes text from the merged slide data).
     setStatus('Converting slides and building notes…');
     const fields = {
-      course_number: '0',                 // auto-assigned at publish time
+      course_number: '0',
       course_title: title,
       course_type: '(not used in publish mode)',
       audience: '(not used in publish mode)',
@@ -271,7 +300,7 @@ async function publish() {
     if (!procResp.ok) throw new Error((await procResp.text()) || 'Processing failed.');
     const pkg = await procResp.json();
 
-    // Step 5: publish (PDF→repo, courses.json, agent KB + menu, live link).
+    // Step 6: publish.
     setStatus('Publishing the course…');
     const pubResp = await fetch('/api/publish_course', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -315,7 +344,6 @@ function showResult(result) {
       <strong>⚠️ ${result.summary || 'Something went wrong.'}</strong>
     </div>`;
   }
-
   if (Array.isArray(result.checklist)) {
     html += '<ul class="checklist">';
     for (const s of result.checklist) {
@@ -323,7 +351,6 @@ function showResult(result) {
     }
     html += '</ul>';
   }
-
   body.innerHTML = html;
   card.style.display = 'block';
 }
@@ -332,6 +359,7 @@ function resetForm() {
   document.getElementById('resultCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('pptx').value = '';
+  document.getElementById('notesFile').value = '';
   document.getElementById('title').value = '';
   document.getElementById('sections').value = '';
   clearError(); clearStatus();
