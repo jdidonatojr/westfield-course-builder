@@ -6,22 +6,22 @@ after /api/process. Returns a stop-at-first-failure checklist and a live link.
 
 Expected JSON body:
   {
-    "job_id":       "<CloudConvert job id>",   # to fetch the finished PDF
-    "pdf_filename": "Course-Name.pdf",          # name to store the PDF under
-    "txt_filename": "Course-Name.txt",          # name for the notes document
-    "txt_content":  "<full instructor notes>",  # goes straight to ElevenLabs
+    "job_id":       "<CloudConvert job id>",
+    "pdf_filename": "Course-Name.pdf",
+    "txt_filename": "Course-Name.txt",
+    "txt_content":  "<full instructor notes>",
     "course_title": "Course Name",
-    "section_map":  "Intro (slides 1-3)\nCore (4-9)\n...",  # one per line
+    "section_map":  "Intro (slides 1-3)\n...",
     "total_slides": 12,
     "player_base":  "https://host/subfolder/",
-    "agent_id":     "agent_..."                 # optional; defaults to recommender
+    "agent_id":     "agent_..."   # optional recommender override
   }
 
 Steps (each re-run safe):
   1. PDF  -> fetch from CloudConvert, push to test repo under pdf_filename
   2. courses.json -> real entry, smallest-unused number (clears TEST placeholder)
-  3. Knowledge base -> upload notes (from txt_content), attach to agent
-  4. Course menu -> insert into the agent's System prompt COURSE MENU
+  3. RECOMMENDER agent -> attach notes (.txt) + add course to its COURSE MENU
+  4. TEACHER agent -> attach BOTH the PDF and the notes (.txt) as files
   5. Live link -> player_base + ?course=<number>
 """
 
@@ -44,7 +44,9 @@ RAW_ROOT = f'https://raw.githubusercontent.com/{OWNER}/{REPO}/{BRANCH}/'
 CC_SYNC_ROOT = 'https://sync.api.cloudconvert.com/v2/jobs/'
 EL_AGENT_URL = 'https://api.elevenlabs.io/v1/convai/agents/'
 EL_KB_FILE_URL = 'https://api.elevenlabs.io/v1/convai/knowledge-base/file'
-DEFAULT_AGENT_ID = 'agent_2201kthka4h3fddvtxj1sz9q4be8'
+
+RECOMMENDER_AGENT_ID = 'agent_2201kthka4h3fddvtxj1sz9q4be8'   # Learning Path Creator
+TEACHER_AGENT_ID = 'agent_5701kth9zyb9e90rcm2w0rrc5f8n'       # Teacher of the Future
 
 
 def gh_headers(token):
@@ -80,6 +82,36 @@ def http_get_bytes(url, headers=None, timeout=120):
     req = urllib.request.Request(url, headers=headers or {})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
+
+
+def el_get_agent(el_key, agent_id):
+    return json.loads(http_get_bytes(
+        EL_AGENT_URL + urllib.parse.quote(agent_id), {'xi-api-key': el_key}, 60).decode('utf-8'))
+
+
+def el_create_doc(el_key, name, file_bytes, content_type):
+    """Create a knowledge-base document from raw bytes (PDF or TXT). Returns doc id."""
+    boundary = '----ailaBoundary' + uuid.uuid4().hex
+    nl = b'\r\n'
+    parts = [('--' + boundary).encode(),
+             ('Content-Disposition: form-data; name="file"; filename="%s"' % name).encode(),
+             ('Content-Type: ' + content_type).encode(), b'', file_bytes,
+             ('--' + boundary).encode(),
+             b'Content-Disposition: form-data; name="name"', b'', name.encode(),
+             ('--' + boundary + '--').encode(), b'']
+    req = urllib.request.Request(EL_KB_FILE_URL, data=nl.join(parts), method='POST')
+    req.add_header('xi-api-key', el_key)
+    req.add_header('Content-Type', 'multipart/form-data; boundary=' + boundary)
+    doc = json.loads(urllib.request.urlopen(req, timeout=180).read().decode('utf-8'))
+    return doc.get('id')
+
+
+def el_patch_agent_cc(el_key, agent_id, cc):
+    pbody = json.dumps({'conversation_config': cc}).encode('utf-8')
+    preq = urllib.request.Request(EL_AGENT_URL + urllib.parse.quote(agent_id), data=pbody, method='PATCH')
+    preq.add_header('xi-api-key', el_key)
+    preq.add_header('Content-Type', 'application/json')
+    urllib.request.urlopen(preq, timeout=120).read()
 
 
 def insert_into_menu(prompt_text, new_line):
@@ -143,22 +175,22 @@ class handler(BaseHTTPRequestHandler):
             section_map = payload.get('section_map', '')
             total_slides = int(payload.get('total_slides', 0) or 0)
             player_base = str(payload.get('player_base', '')).strip()
-            agent_id = str(payload.get('agent_id', '') or DEFAULT_AGENT_ID).strip()
+            rec_agent_id = str(payload.get('agent_id', '') or RECOMMENDER_AGENT_ID).strip()
 
             missing = [k for k, v in {
                 'job_id': job_id, 'pdf_filename': pdf_filename, 'txt_filename': txt_filename,
-                'txt_content': txt_content, 'course_title': course_title,
-                'player_base': player_base
+                'txt_content': txt_content, 'course_title': course_title, 'player_base': player_base
             }.items() if not v]
             if missing:
                 record('setup', 'failed', 'Missing: ' + ', '.join(missing))
                 return self._finish(False, steps, None)
             if not (token and el_key and cc_key):
-                record('setup', 'failed', 'One or more API keys are not set on this project.')
+                record('setup', 'failed', 'One or more API keys are not set.')
                 return self._finish(False, steps, None)
 
             course_id = slugify(course_title)
             pdf_url = RAW_ROOT + pdf_filename
+            pdf_bytes = None
 
             # ---------- STEP 1: fetch PDF from CloudConvert, push to repo ----------
             try:
@@ -168,24 +200,17 @@ class handler(BaseHTTPRequestHandler):
                 tasks = info.get('data', {}).get('tasks', [])
                 src_url = None
                 for t in tasks:
-                    if t.get('name') == 'export-pdf' and t.get('status') == 'finished':
+                    if t.get('operation') == 'export/url' and t.get('status') == 'finished':
                         files = (t.get('result') or {}).get('files') or []
-                        if files:
-                            src_url = files[0].get('url')
+                        for f in files:
+                            if (f.get('filename') or '').lower().endswith('.pdf'):
+                                src_url = f.get('url')
+                                break
+                    if src_url:
                         break
                 if not src_url:
-                    for t in tasks:
-                        if t.get('operation') == 'export/url' and t.get('status') == 'finished':
-                            files = (t.get('result') or {}).get('files') or []
-                            for f in files:
-                                if (f.get('filename') or '').lower().endswith('.pdf'):
-                                    src_url = f.get('url')
-                                    break
-                        if src_url:
-                            break
-                if not src_url:
                     raise RuntimeError('No finished PDF found for that job_id (it may have expired).')
-                raw = http_get_bytes(src_url)
+                pdf_bytes = http_get_bytes(src_url)
                 sha = None
                 try:
                     meta = json.loads(http_get_bytes(
@@ -196,7 +221,7 @@ class handler(BaseHTTPRequestHandler):
                     if e.code != 404:
                         raise
                 body = {'message': f'Add course PDF: {pdf_filename}',
-                        'content': base64.b64encode(raw).decode('ascii'), 'branch': BRANCH}
+                        'content': base64.b64encode(pdf_bytes).decode('ascii'), 'branch': BRANCH}
                 if sha:
                     body['sha'] = sha
                 req = urllib.request.Request(
@@ -204,7 +229,7 @@ class handler(BaseHTTPRequestHandler):
                     data=json.dumps(body).encode('utf-8'),
                     headers=gh_headers(token), method='PUT')
                 urllib.request.urlopen(req, timeout=60).read()
-                record('1_pdf', 'pushed', f'{pdf_filename} ({len(raw)} bytes)')
+                record('1_pdf', 'pushed', f'{pdf_filename} ({len(pdf_bytes)} bytes)')
             except Exception as e:
                 record('1_pdf', 'failed', str(e))
                 return self._finish(False, steps, None)
@@ -257,11 +282,9 @@ class handler(BaseHTTPRequestHandler):
                 record('2_courses_json', 'failed', str(e))
                 return self._finish(False, steps, None)
 
-            # ---------- STEP 3 & 4: agent KB + menu (one read, one save) ----------
+            # ---------- STEP 3: RECOMMENDER agent (KB + menu) ----------
             try:
-                agent = json.loads(http_get_bytes(
-                    EL_AGENT_URL + urllib.parse.quote(agent_id),
-                    {'xi-api-key': el_key}, 60).decode('utf-8'))
+                agent = el_get_agent(el_key, rec_agent_id)
                 cc = agent.get('conversation_config', {})
                 prompt_obj = cc.get('agent', {}).get('prompt', {})
                 kb_list = prompt_obj.get('knowledge_base', [])
@@ -273,21 +296,8 @@ class handler(BaseHTTPRequestHandler):
                 if any(isinstance(it, dict) and it.get('name') == txt_filename for it in kb_list):
                     kb_status = 'already_attached'
                 else:
-                    file_bytes = txt_content.encode('utf-8')
-                    boundary = '----ailaBoundary' + uuid.uuid4().hex
-                    nl = b'\r\n'
-                    parts = [('--' + boundary).encode(),
-                             ('Content-Disposition: form-data; name="file"; filename="%s"' % txt_filename).encode(),
-                             b'Content-Type: text/plain', b'', file_bytes,
-                             ('--' + boundary).encode(),
-                             b'Content-Disposition: form-data; name="name"', b'', txt_filename.encode(),
-                             ('--' + boundary + '--').encode(), b'']
-                    req = urllib.request.Request(EL_KB_FILE_URL, data=nl.join(parts), method='POST')
-                    req.add_header('xi-api-key', el_key)
-                    req.add_header('Content-Type', 'multipart/form-data; boundary=' + boundary)
-                    doc = json.loads(urllib.request.urlopen(req, timeout=120).read().decode('utf-8'))
-                    kb_list.append({'type': 'file', 'name': txt_filename,
-                                    'id': doc.get('id'), 'usage_mode': 'auto'})
+                    doc_id = el_create_doc(el_key, txt_filename, txt_content.encode('utf-8'), 'text/plain')
+                    kb_list.append({'type': 'file', 'name': txt_filename, 'id': doc_id, 'usage_mode': 'auto'})
                     kb_status = 'attached'
                     changed = True
 
@@ -299,17 +309,52 @@ class handler(BaseHTTPRequestHandler):
                     prompt_obj['knowledge_base'] = kb_list
                     prompt_obj['prompt'] = new_prompt
                     cc['agent']['prompt'] = prompt_obj
-                    pbody = json.dumps({'conversation_config': cc}).encode('utf-8')
-                    preq = urllib.request.Request(EL_AGENT_URL + urllib.parse.quote(agent_id),
-                                                  data=pbody, method='PATCH')
-                    preq.add_header('xi-api-key', el_key)
-                    preq.add_header('Content-Type', 'application/json')
-                    urllib.request.urlopen(preq, timeout=120).read()
+                    el_patch_agent_cc(el_key, rec_agent_id, cc)
 
-                record('3_knowledge_base', kb_status, '')
-                record('4_course_menu', menu_status, '')
+                record('3_recommender_kb', kb_status, '')
+                record('3_recommender_menu', menu_status, '')
             except Exception as e:
-                record('3_4_agent', 'failed', str(e))
+                record('3_recommender', 'failed', str(e))
+                return self._finish(False, steps, None)
+
+            # ---------- STEP 4: TEACHER agent (attach PDF + TXT) ----------
+            try:
+                t_agent = el_get_agent(el_key, TEACHER_AGENT_ID)
+                tcc = t_agent.get('conversation_config', {})
+                t_prompt_obj = tcc.get('agent', {}).get('prompt', {})
+                t_kb = t_prompt_obj.get('knowledge_base', [])
+                if not isinstance(t_kb, list):
+                    t_kb = []
+                t_changed = False
+                existing_names = {it.get('name') for it in t_kb if isinstance(it, dict)}
+
+                # Attach the PDF (so the Teacher can see the slides)
+                if pdf_filename in existing_names:
+                    pdf_stat = 'already_attached'
+                else:
+                    pdf_doc_id = el_create_doc(el_key, pdf_filename, pdf_bytes, 'application/pdf')
+                    t_kb.append({'type': 'file', 'name': pdf_filename, 'id': pdf_doc_id, 'usage_mode': 'auto'})
+                    pdf_stat = 'attached'
+                    t_changed = True
+
+                # Attach the notes TXT (so the Teacher teaches from real notes)
+                if txt_filename in existing_names:
+                    txt_stat = 'already_attached'
+                else:
+                    txt_doc_id = el_create_doc(el_key, txt_filename, txt_content.encode('utf-8'), 'text/plain')
+                    t_kb.append({'type': 'file', 'name': txt_filename, 'id': txt_doc_id, 'usage_mode': 'auto'})
+                    txt_stat = 'attached'
+                    t_changed = True
+
+                if t_changed:
+                    t_prompt_obj['knowledge_base'] = t_kb
+                    tcc['agent']['prompt'] = t_prompt_obj
+                    el_patch_agent_cc(el_key, TEACHER_AGENT_ID, tcc)
+
+                record('4_teacher_pdf', pdf_stat, pdf_filename)
+                record('4_teacher_txt', txt_stat, txt_filename)
+            except Exception as e:
+                record('4_teacher', 'failed', str(e))
                 return self._finish(False, steps, None)
 
             # ---------- STEP 5: live link ----------
