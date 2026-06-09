@@ -35,6 +35,10 @@
     padding: 12px 22px; font-size: 16px; font-weight: 600; cursor: pointer; }
   button:hover { background: var(--brand-dark); }
   button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .gen-btn { background: #eef4ff; color: var(--brand-dark); border: 1px solid #cfe0ff;
+    padding: 7px 12px; font-size: 13px; font-weight: 600; border-radius: 7px; margin-top: 8px; }
+  .gen-btn:hover { background: #e0ecff; }
+  .gen-note { color: var(--muted); font-size: 12px; margin-top: 6px; min-height: 16px; }
   .status { margin-top: 18px; padding: 14px 16px; border-radius: 8px; background: #eef4ff; }
   .error { margin-top: 18px; padding: 14px 16px; border-radius: 8px;
     background: #fde9e7; color: var(--bad); border: 1px solid #f3c4bf; }
@@ -44,7 +48,7 @@
   ul.checklist { list-style: none; padding: 0; margin: 14px 0 0; }
   ul.checklist li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
   ul.checklist li:first-child { border-top: none; }
-  .tag { display: inline-block; min-width: 130px; color: var(--muted); }
+  .tag { display: inline-block; min-width: 150px; color: var(--muted); }
   .link-btn { background: none; color: var(--brand-dark); padding: 0; font-weight: 600;
     text-decoration: underline; font-size: 15px; }
   footer { color: var(--muted); font-size: 13px; margin-top: 28px; text-align: center; }
@@ -76,7 +80,7 @@
       <small class="hint">Maximum size: 100 MB. The course needs speaker notes — either inside this deck, or in the notes file below.</small>
     </div>
 
-    <!-- Separate notes file (optional) -->
+    <!-- Separate notes file -->
     <div class="field">
       <label for="notesFile">Instructor notes by slide (.txt) <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
       <input type="file" id="notesFile" accept=".txt" />
@@ -90,14 +94,41 @@
       <small class="hint">This is the name learners and the agent will see.</small>
     </div>
 
-    <!-- Section map (optional) -->
+    <!-- Course Type -->
     <div class="field">
-      <label for="sections">Section map <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <label for="courseType">Course type</label>
+      <input type="text" id="courseType" placeholder="e.g., Skills-based, hands-on" />
+      <small class="hint">A short description of the kind of course this is.</small>
+    </div>
+
+    <!-- Audience -->
+    <div class="field">
+      <label for="audience">Audience</label>
+      <input type="text" id="audience" placeholder="e.g., Sales representatives and customer support teams" />
+      <small class="hint">Who this course is for.</small>
+    </div>
+
+    <!-- Section map + Generate -->
+    <div class="field">
+      <label for="sections">Section map</label>
       <textarea id="sections" placeholder="One section per line, like:
 Opening and Welcome (slides 1-3)
 Core Skills (4-9)
 Wrap-Up (10-12)"></textarea>
-      <small class="hint">Leave blank for a single full-course section. Put the slide range in parentheses.</small>
+      <button type="button" class="gen-btn" id="genSectionsBtn" onclick="generate('section_map')">✨ Generate from slides</button>
+      <div class="gen-note" id="genSectionsNote"></div>
+      <small class="hint">Lets learners jump to a section. Leave blank and it will be filled in automatically when you publish.</small>
+    </div>
+
+    <!-- Teaching notes + Generate -->
+    <div class="field">
+      <label for="teaching">Teaching notes</label>
+      <textarea id="teaching" placeholder="Guidance for the teaching agent — tone, pace, what to emphasize.
+You can generate a draft, then edit. Regulated fields can add rules like:
+Do not vary from the approved documents in the library."></textarea>
+      <button type="button" class="gen-btn" id="genTeachingBtn" onclick="generate('teaching_notes')">✨ Generate from slides</button>
+      <div class="gen-note" id="genTeachingNote"></div>
+      <small class="hint">Guides how the agent teaches. Leave blank and it will be filled in automatically when you publish.</small>
     </div>
 
     <button id="publishBtn" onclick="publish()">Publish course</button>
@@ -134,7 +165,7 @@ document.getElementById('pptx').addEventListener('change', (e) => {
   }
 });
 
-// ---------- PPTX reader (ported from the existing builder) ----------
+// ---------- PPTX reader ----------
 function decodeEntities(s) {
   return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
           .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'");
@@ -175,7 +206,7 @@ async function extractSlideData(file) {
            hiddenCount: slides.length - visibleSlides.length };
 }
 
-// ---------- Separate-notes parser + merge (ported from V2) ----------
+// ---------- Separate-notes parser + merge ----------
 function parseNotesFile(text) {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const parts = normalized.split(/^Slide\s+(\d+):\s*$/m);
@@ -211,22 +242,76 @@ function readFileText(file) {
   });
 }
 
+// Build slide data from the chosen PPTX, merging the notes file if present.
+async function getSlideDataWithNotes() {
+  const file = document.getElementById('pptx').files[0];
+  if (!file) throw new Error('Please choose your PowerPoint (.pptx) first, then generate.');
+  if (!/\.pptx$/i.test(file.name)) throw new Error('Please choose a .pptx file first.');
+  let slideData = await extractSlideData(file);
+  const notesFile = document.getElementById('notesFile').files[0];
+  if (notesFile) {
+    const notesText = await readFileText(notesFile);
+    const notesArray = parseNotesFile(notesText);
+    if (notesArray.length) slideData = mergeNotes(slideData, notesArray);
+  }
+  return slideData;
+}
+
 // ---------- UI helpers ----------
 function setStatus(msg) { const el = document.getElementById('status'); el.textContent = msg; el.style.display = 'block'; }
 function clearStatus() { document.getElementById('status').style.display = 'none'; }
-function showError(msg) { const el = document.getElementById('error'); el.textContent = msg; el.style.display = 'block'; }
+function showError(msg) { const el = document.getElementById('error'); el.textContent = msg; el.style.display = 'block'; el.scrollIntoView({behavior:'smooth', block:'center'}); }
 function clearError() { document.getElementById('error').style.display = 'none'; }
+
+// ---------- Generate (one box at a time) ----------
+async function callSuggest(type, slideData, title) {
+  const resp = await fetch('/api/suggest', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, slide_data: slideData, course_title: title || 'Untitled Course' })
+  });
+  if (!resp.ok) throw new Error((await resp.text()) || 'The generator did not respond.');
+  const data = await resp.json();
+  return (data.suggestion || '').trim();
+}
+async function generate(type) {
+  const isSection = (type === 'section_map');
+  const btn = document.getElementById(isSection ? 'genSectionsBtn' : 'genTeachingBtn');
+  const note = document.getElementById(isSection ? 'genSectionsNote' : 'genTeachingNote');
+  const box = document.getElementById(isSection ? 'sections' : 'teaching');
+  const title = document.getElementById('title').value.trim();
+  clearError();
+  note.textContent = '';
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Reading slides…';
+  try {
+    const slideData = await getSlideDataWithNotes();
+    btn.textContent = 'Generating…';
+    const text = await callSuggest(type, slideData, title);
+    if (!text) throw new Error('The generator came back empty. You can type it in, or try again.');
+    box.value = text;
+    note.textContent = 'Draft created from your slides and notes — edit freely.';
+  } catch (err) {
+    note.textContent = '';
+    showError(err.message || String(err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
 
 // ---------- The publish flow ----------
 async function publish() {
   clearError(); clearStatus();
   const btn = document.getElementById('publishBtn');
+  const btnLabel = btn.textContent;
 
   const playerBase = document.getElementById('playerBase').value.trim();
   const file = document.getElementById('pptx').files[0];
   const notesFile = document.getElementById('notesFile').files[0];
-  let title = document.getElementById('title').value.trim();
-  let sectionMap = document.getElementById('sections').value.trim();
+  const title = document.getElementById('title').value.trim();
+  const courseType = document.getElementById('courseType').value.trim();
+  const audience = document.getElementById('audience').value.trim();
 
   // ---- Guards (before any upload) ----
   if (!playerBase) { showError('Please enter where the course will be played from.'); return; }
@@ -241,41 +326,49 @@ async function publish() {
   if (!title) { showError('Please enter a course title.'); return; }
 
   btn.disabled = true;
+  btn.textContent = 'Building… see below';
+  setStatus('Reading your slides…');
+  document.getElementById('status').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
   try {
     if (document.getElementById('makeDefault').checked) {
       localStorage.setItem(DEFAULT_KEY, playerBase);
     }
 
-    // Step 1: read the slides.
-    setStatus('Reading your slides…');
+    // Read slides (+ merge notes file).
     let slideData = await extractSlideData(file);
-
-    // Step 2: figure out the notes (notes file wins; else the deck's own notes).
     if (notesFile) {
       setStatus('Reading your notes file…');
-      const notesText = await readFileText(notesFile);
-      const notesArray = parseNotesFile(notesText);
-      if (!notesArray.length) {
-        throw new Error('I couldn\'t find any "Slide N:" sections in that notes file. Please check the format.');
-      }
-      slideData = mergeNotes(slideData, notesArray);  // throws a clear message if counts differ
+      const notesArray = parseNotesFile(await readFileText(notesFile));
+      if (!notesArray.length) throw new Error('I couldn\'t find any "Slide N:" sections in that notes file. Please check the format.');
+      slideData = mergeNotes(slideData, notesArray);
     }
-
-    // Guard: there must be notes from somewhere.
     const hasNotes = slideData.slides.some(s => s.notes && s.notes.trim());
-    if (!hasNotes) {
-      throw new Error('This deck has no speaker notes, and no notes file was provided. The teaching agent needs notes. Add notes to the deck, or upload a notes (.txt) file.');
-    }
+    if (!hasNotes) throw new Error('This deck has no speaker notes, and no notes file was provided. The teaching agent needs notes. Add notes to the deck, or upload a notes (.txt) file.');
     const total = slideData.totalSlides;
-    if (!sectionMap) sectionMap = `Full Course (slides 1-${total})`;
 
-    // Step 3: CloudConvert upload URL.
+    // Auto-fill any blank boxes (never empty at publish).
+    let sectionMap = document.getElementById('sections').value.trim();
+    let teaching = document.getElementById('teaching').value.trim();
+    if (!sectionMap) {
+      setStatus('Drafting the section map from your slides…');
+      try { sectionMap = await callSuggest('section_map', slideData, title); } catch (e) { sectionMap = ''; }
+      if (!sectionMap) sectionMap = `Full Course (slides 1-${total})`;
+      document.getElementById('sections').value = sectionMap;
+    }
+    if (!teaching) {
+      setStatus('Drafting the teaching notes from your slides…');
+      try { teaching = await callSuggest('teaching_notes', slideData, title); } catch (e) { teaching = ''; }
+      if (teaching) document.getElementById('teaching').value = teaching;
+    }
+
+    // CloudConvert upload URL.
     setStatus('Preparing upload…');
     const jobResp = await fetch('/api/create_job', { method: 'POST' });
     if (!jobResp.ok) throw new Error((await jobResp.text()) || 'Could not start the upload.');
     const jobInfo = await jobResp.json();
 
-    // Step 4: upload PPTX to CloudConvert.
+    // Upload PPTX to CloudConvert.
     setStatus('Uploading your PowerPoint…');
     const cloudForm = new FormData();
     Object.entries(jobInfo.upload_parameters).forEach(([k, v]) => cloudForm.append(k, v));
@@ -283,15 +376,15 @@ async function publish() {
     const upResp = await fetch(jobInfo.upload_url, { method: 'POST', body: cloudForm });
     if (!upResp.ok) throw new Error('Upload to CloudConvert failed.');
 
-    // Step 5: process (convert + build notes text from the merged slide data).
+    // Process (convert + build notes text).
     setStatus('Converting slides and building notes…');
     const fields = {
       course_number: '0',
       course_title: title,
-      course_type: '(not used in publish mode)',
-      audience: '(not used in publish mode)',
+      course_type: courseType || '(not specified)',
+      audience: audience || '(not specified)',
       section_map: sectionMap,
-      teaching_notes: '(not used in publish mode)'
+      teaching_notes: teaching || '(not specified)'
     };
     const procResp = await fetch('/api/process', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -300,7 +393,7 @@ async function publish() {
     if (!procResp.ok) throw new Error((await procResp.text()) || 'Processing failed.');
     const pkg = await procResp.json();
 
-    // Step 6: publish.
+    // Publish.
     setStatus('Publishing the course…');
     const pubResp = await fetch('/api/publish_course', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -310,7 +403,10 @@ async function publish() {
         txt_filename: pkg.txt_filename,
         txt_content: pkg.txt_content,
         course_title: title,
+        course_type: courseType,
+        audience: audience,
         section_map: sectionMap,
+        teaching_notes: teaching,
         total_slides: total,
         player_base: playerBase
       })
@@ -324,6 +420,7 @@ async function publish() {
     showError(err.message || String(err));
   } finally {
     btn.disabled = false;
+    btn.textContent = btnLabel;
   }
 }
 
@@ -353,6 +450,7 @@ function showResult(result) {
   }
   body.innerHTML = html;
   card.style.display = 'block';
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function resetForm() {
@@ -361,8 +459,14 @@ function resetForm() {
   document.getElementById('pptx').value = '';
   document.getElementById('notesFile').value = '';
   document.getElementById('title').value = '';
+  document.getElementById('courseType').value = '';
+  document.getElementById('audience').value = '';
   document.getElementById('sections').value = '';
+  document.getElementById('teaching').value = '';
+  document.getElementById('genSectionsNote').textContent = '';
+  document.getElementById('genTeachingNote').textContent = '';
   clearError(); clearStatus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 </script>
 </body>
