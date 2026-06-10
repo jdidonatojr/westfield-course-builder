@@ -72,6 +72,15 @@
   </header>
 
   <div class="card" id="formCard">
+    <!-- Customer / environment picker (hidden unless connection cards exist) -->
+    <div class="field" id="tenantField" style="display:none;">
+      <label for="tenantSelect">Customer / environment</label>
+      <select id="tenantSelect" style="width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:15px; font-family:inherit; background:#fff;">
+        <option value="">— Default (built-in) —</option>
+      </select>
+      <small class="hint">Choose which customer this course publishes to. Picking one fills in the player address below.</small>
+    </div>
+
     <!-- Player base -->
     <div class="field">
       <label for="playerBase">Where will the course be played from?</label>
@@ -174,7 +183,38 @@ const MAX_MB = 100;
 window.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem(DEFAULT_KEY);
   if (saved) document.getElementById('playerBase').value = saved;
+  loadTenants();
 });
+
+// ---------- Customer / environment picker ----------
+let TENANTS = [];   // [{name, label, player_base}]
+async function loadTenants() {
+  try {
+    const resp = await fetch('/api/tenants');
+    if (!resp.ok) return;                 // quietly skip; form works as before
+    const data = await resp.json();
+    TENANTS = Array.isArray(data.tenants) ? data.tenants : [];
+    if (!TENANTS.length) return;          // no cards: keep the picker hidden
+    const sel = document.getElementById('tenantSelect');
+    for (const t of TENANTS) {
+      const opt = document.createElement('option');
+      opt.value = t.name;
+      opt.textContent = t.label || t.name;
+      sel.appendChild(opt);
+    }
+    document.getElementById('tenantField').style.display = 'block';
+    sel.addEventListener('change', () => {
+      const t = TENANTS.find(x => x.name === sel.value);
+      if (t && t.player_base) {
+        document.getElementById('playerBase').value = t.player_base;
+      }
+    });
+  } catch (e) { /* picker is optional; never block the form */ }
+}
+function chosenTenant() {
+  const sel = document.getElementById('tenantSelect');
+  return sel ? sel.value.trim() : '';
+}
 
 function prefillTitle(name, stripExt) {
   const titleEl = document.getElementById('title');
@@ -451,6 +491,7 @@ async function publish() {
     const pubResp = await fetch('/api/publish_course', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        tenant: chosenTenant(),
         job_id: pkg.job_id,
         pdf_filename: pkg.pdf_filename,
         txt_filename: pkg.txt_filename,
