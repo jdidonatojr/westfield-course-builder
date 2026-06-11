@@ -51,6 +51,52 @@ EL_KB_FILE_URL = 'https://api.elevenlabs.io/v1/convai/knowledge-base/file'
 RECOMMENDER_AGENT_ID = 'agent_2201kthka4h3fddvtxj1sz9q4be8'   # Learning Path Creator
 TEACHER_AGENT_ID = 'agent_5701kth9zyb9e90rcm2w0rrc5f8n'       # Teacher of the Future
 
+
+def resolve_tenant(tenant_name):
+    """Return the connection card for the chosen tenant.
+
+    If a tenant name is given, it MUST exist in TENANTS_JSON (no silent
+    fallback, so a typo can never publish into the wrong place).
+    If no tenant name is given, fall back to the original hardcoded
+    values so existing behavior is unchanged.
+    """
+    fallback = {
+        'label': 'Default (built-in)',
+        'elevenlabs_api_key': os.environ.get('ELEVENLABS_API_KEY', '').strip(),
+        'teacher_agent_id': TEACHER_AGENT_ID,
+        'recommender_agent_id': RECOMMENDER_AGENT_ID,
+        'github_token': os.environ.get('GITHUB_TOKEN', '').strip(),
+        'github_owner': OWNER,
+        'github_repo': REPO,
+        'player_base': '',
+    }
+    if not tenant_name:
+        return fallback, None
+
+    raw = os.environ.get('TENANTS_JSON', '').strip()
+    if not raw:
+        return None, 'Tenant "%s" was chosen but TENANTS_JSON is not set.' % tenant_name
+    try:
+        tenants = json.loads(raw)
+    except Exception:
+        return None, 'TENANTS_JSON is not valid JSON. Fix the Vercel setting.'
+    card = tenants.get(tenant_name)
+    if not isinstance(card, dict):
+        return None, 'Tenant "%s" was not found in TENANTS_JSON.' % tenant_name
+
+    # A named tenant's card must be COMPLETE on its own. We never backfill
+    # from the built-in defaults, so an incomplete card can never silently
+    # publish into another tenant's agents or repo.
+    merged = {k: str(v).strip() for k, v in card.items() if v is not None}
+    merged.setdefault('label', tenant_name)
+    merged.setdefault('player_base', '')
+    required = ['elevenlabs_api_key', 'teacher_agent_id', 'recommender_agent_id',
+                'github_token', 'github_owner', 'github_repo']
+    missing = [k for k in required if not merged.get(k)]
+    if missing:
+        return None, 'Tenant "%s" card is missing: %s' % (tenant_name, ', '.join(missing))
+    return merged, None
+
 DIVIDER = '# -----------------------------------------------------'
 
 
@@ -284,9 +330,22 @@ class handler(BaseHTTPRequestHandler):
             length = int(self.headers.get('Content-Length', 0))
             payload = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
 
-            token = os.environ.get('GITHUB_TOKEN', '').strip()
-            el_key = os.environ.get('ELEVENLABS_API_KEY', '').strip()
+            tenant_name = str(payload.get('tenant', '')).strip()
+            card, tenant_err = resolve_tenant(tenant_name)
+            if tenant_err:
+                record('setup', 'failed', tenant_err)
+                return self._finish(False, steps, None)
+            if tenant_name:
+                record('0_tenant', 'selected', card.get('label') or tenant_name)
+
+            token = card['github_token']
+            el_key = card['elevenlabs_api_key']
             cc_key = os.environ.get('CLOUDCONVERT_API_KEY', '').strip()
+            gh_owner = card['github_owner']
+            gh_repo = card['github_repo']
+            teacher_agent_default = card['teacher_agent_id']
+            recommender_agent_default = card['recommender_agent_id']
+            raw_root = 'https://raw.githubusercontent.com/%s/%s/%s/' % (gh_owner, gh_repo, BRANCH)
 
             job_id = str(payload.get('job_id', '')).strip()
             pdf_filename = str(payload.get('pdf_filename', '')).strip()
@@ -299,7 +358,7 @@ class handler(BaseHTTPRequestHandler):
             teaching_notes = payload.get('teaching_notes', '')
             total_slides = int(payload.get('total_slides', 0) or 0)
             player_base = str(payload.get('player_base', '')).strip()
-            rec_agent_id = str(payload.get('agent_id', '') or RECOMMENDER_AGENT_ID).strip()
+            rec_agent_id = str(payload.get('agent_id', '') or recommender_agent_default).strip()
 
             missing = [k for k, v in {
                 'job_id': job_id, 'pdf_filename': pdf_filename, 'txt_filename': txt_filename,
@@ -313,7 +372,7 @@ class handler(BaseHTTPRequestHandler):
                 return self._finish(False, steps, None)
 
             course_id = slugify(course_title)
-            pdf_url = RAW_ROOT + pdf_filename
+            pdf_url = raw_root + pdf_filename
             pdf_bytes = None
 
             # ---------- STEP 1: PDF -> repo ----------
@@ -337,7 +396,7 @@ class handler(BaseHTTPRequestHandler):
                 sha = None
                 try:
                     meta = json.loads(http_get_bytes(
-                        f'{API_ROOT}/repos/{OWNER}/{REPO}/contents/{urllib.parse.quote(pdf_filename)}?ref={BRANCH}',
+                        f'{API_ROOT}/repos/{gh_owner}/{gh_repo}/contents/{urllib.parse.quote(pdf_filename)}?ref={BRANCH}',
                         gh_headers(token), 30).decode('utf-8'))
                     sha = meta.get('sha')
                 except urllib.error.HTTPError as e:
@@ -348,7 +407,7 @@ class handler(BaseHTTPRequestHandler):
                 if sha:
                     body['sha'] = sha
                 req = urllib.request.Request(
-                    f'{API_ROOT}/repos/{OWNER}/{REPO}/contents/{urllib.parse.quote(pdf_filename)}',
+                    f'{API_ROOT}/repos/{gh_owner}/{gh_repo}/contents/{urllib.parse.quote(pdf_filename)}',
                     data=json.dumps(body).encode('utf-8'), headers=gh_headers(token), method='PUT')
                 urllib.request.urlopen(req, timeout=60).read()
                 record('1_pdf', 'pushed', f'{pdf_filename} ({len(pdf_bytes)} bytes)')
@@ -364,7 +423,7 @@ class handler(BaseHTTPRequestHandler):
                 if not sections:
                     sections = [{'label': f'Full Course (slides 1-{total_slides})', 'startSlide': 1}]
                 meta = json.loads(http_get_bytes(
-                    f'{API_ROOT}/repos/{OWNER}/{REPO}/contents/{COURSES_PATH}?ref={BRANCH}',
+                    f'{API_ROOT}/repos/{gh_owner}/{gh_repo}/contents/{COURSES_PATH}?ref={BRANCH}',
                     gh_headers(token), 30).decode('utf-8'))
                 data = json.loads(base64.b64decode(meta['content']).decode('utf-8'))
                 csha = meta['sha']
@@ -397,7 +456,7 @@ class handler(BaseHTTPRequestHandler):
                         'content': base64.b64encode(text.encode('utf-8')).decode('ascii'),
                         'branch': BRANCH, 'sha': csha}
                 req = urllib.request.Request(
-                    f'{API_ROOT}/repos/{OWNER}/{REPO}/contents/{COURSES_PATH}',
+                    f'{API_ROOT}/repos/{gh_owner}/{gh_repo}/contents/{COURSES_PATH}',
                     data=json.dumps(body).encode('utf-8'), headers=gh_headers(token), method='PUT')
                 urllib.request.urlopen(req, timeout=30).read()
                 record('2_courses_json', cj_status, f'course #{course_number}')
@@ -438,7 +497,7 @@ class handler(BaseHTTPRequestHandler):
 
             # ---------- STEP 4: TEACHER (PDF + TXT + profile block) ----------
             try:
-                t_agent = el_get_agent(el_key, TEACHER_AGENT_ID)
+                t_agent = el_get_agent(el_key, teacher_agent_default)
                 tcc = t_agent.get('conversation_config', {})
                 t_prompt_obj = tcc.get('agent', {}).get('prompt', {})
                 t_kb = t_prompt_obj.get('knowledge_base', [])
@@ -476,7 +535,7 @@ class handler(BaseHTTPRequestHandler):
                     t_prompt_obj['knowledge_base'] = t_kb
                     t_prompt_obj['prompt'] = new_t_prompt
                     tcc['agent']['prompt'] = t_prompt_obj
-                    el_patch_agent_cc(el_key, TEACHER_AGENT_ID, tcc)
+                    el_patch_agent_cc(el_key, teacher_agent_default, tcc)
 
                 record('4_teacher_pdf', pdf_stat, pdf_filename)
                 record('4_teacher_txt', txt_stat, txt_filename)
