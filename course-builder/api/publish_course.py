@@ -39,7 +39,7 @@ import urllib.error
 from http.server import BaseHTTPRequestHandler
 
 OWNER = 'jdidonatojr'
-REPO = 'aila-course-files-test'
+REPO = 'westfield-course-files'
 BRANCH = 'main'
 COURSES_PATH = 'courses.json'
 API_ROOT = 'https://api.github.com'
