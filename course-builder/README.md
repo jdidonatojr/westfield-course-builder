@@ -1,4 +1,4 @@
-# AILA Course Builder
+# Westfield Course Builder
 
 A web tool that turns a PowerPoint deck into everything needed to publish a new course in the AI Learning Alliance platform.
 
